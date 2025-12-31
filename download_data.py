@@ -1,6 +1,7 @@
 import os
 import requests
 from tqdm import tqdm
+import urllib.request
 
 # Configuration
 BASE_URL = "https://huggingface.co/datasets/aronkk/gakg/resolve/main"
@@ -13,11 +14,10 @@ DATA_DIR = "data"
 def download_file(url, dest_path):
     print(f"Downloading {url} to {dest_path}...")
     try:
-        # 配置你的代理地址
-        proxies = {
-            'http': 'http://127.0.0.1:7890',  # 修改为你的代理地址和端口
-            'https': 'http://127.0.0.1:7890',  # 修改为你的代理地址和端口
-        }
+        # 自动获取系统代理配置 (Windows 注册表或环境变量)
+        proxies = urllib.request.getproxies()
+        if proxies:
+            print(f"  Using detected proxies: {proxies}")
         
         response = requests.get(url, stream=True, timeout=30, proxies=proxies)
         response.raise_for_status()

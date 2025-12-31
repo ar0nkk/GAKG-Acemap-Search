@@ -25,9 +25,9 @@ pip install -r requirements.txt
 ```
 
 ### 下载知识图谱
-由于数据集较大，请运行 `download_data.py` 脚本从 Hugging Face 下载所需的 Parquet 文件：
+由于数据集较大，请运行 `download_data.py` 脚本从 Hugging Face 下载所需的 Parquet 文件。
 
-> 注：脚本默认配置了本地代理 `http://127.0.0.1:7890`，如需使用代理，请检查脚本中的 `PROXIES` 变量是否需要修改
+> 注：脚本会自动检测并使用您系统当前的代理配置（环境变量或 Windows 系统代理）。
 
 ### 启用搜索
 - 终端运行：`main.py`
