@@ -5,11 +5,15 @@
 
 ## 项目结构
 
-- `data/`: 包含 GAKG 数据子集 (`gakg_subset.parquet`)。
-- `main.py`: 搜索增强的主程序。
-- `app.py`: 基于 Flask 的简单 Web 界面，实现可视化搜索增强功能。
-- `pagerank.py`: PageRank 算法实现（用于提取关键词邻居的重要性）。
-- `requirements.txt`
+```text
+.
+├── data/
+│   └── gakg_subset.parquet  # GAKG 数据子集
+├── app.py                   # 基于 Flask 的 Web 界面
+├── main.py                  # 搜索增强主程序
+├── pagerank.py              # PageRank 算法实现
+└── requirements.txt
+```
 
 
 ## 使用方法
