@@ -1,7 +1,6 @@
 # Data
 data/*
 !data/.gitkeep
-!data/gakg_subset.parquet
 
 # Python cache
 __pycache__/

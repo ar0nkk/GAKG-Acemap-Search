@@ -2,24 +2,40 @@ import pandas as pd
 import requests
 import numpy as np
 from pagerank import PageRank
+import os
+import glob
 
 # Configuration
-GAKG_PATH = 'd:/Syncdisk/SJTU/DataMining/pilot/GAKG_Acemap_Search_Enhancement/data/gakg_subset.parquet'
+GAKG_PATH = 'd:/Syncdisk/SJTU/DataMining/pilot/GAKG_Acemap_Search_Enhancement/data'
 ACEMAP_API_URL = 'https://acemap.info/api/v1/work/search'
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 }
 
-def load_gakg(path):
-    """Loads the GAKG subset from a parquet file."""
-    print(f"Loading GAKG from {path}...")
-    try:
-        df = pd.read_parquet(path)
-        print(f"Loaded {len(df)} triples.")
-        return df
-    except Exception as e:
-        print(f"Error loading GAKG: {e}")
-        return None
+def load_gakg(data_dir):
+    """Loads the GAKG dataset from the data directory."""
+    print(f"Looking for GAKG data in {data_dir}...")
+    
+    # Try to find full chunks
+    full_chunks = sorted(glob.glob(os.path.join(data_dir, "gakg_full_chunk_*.parquet")))
+    
+    if full_chunks:
+        print(f"Found {len(full_chunks)} dataset chunks. Loading...")
+        dfs = []
+        for chunk_path in full_chunks:
+            try:
+                print(f"  Loading {os.path.basename(chunk_path)}...")
+                dfs.append(pd.read_parquet(chunk_path))
+            except Exception as e:
+                print(f"  Error loading {chunk_path}: {e}")
+        
+        if dfs:
+            combined_df = pd.concat(dfs, ignore_index=True)
+            print(f"Successfully loaded GAKG dataset with {len(combined_df)} triples.")
+            return combined_df
+    
+    print("No GAKG parquet files found. Please run download_data.py first.")
+    return None
 
 def get_weighted_neighbors_pagerank(gakg_df, keyword, top_k=20):
     """

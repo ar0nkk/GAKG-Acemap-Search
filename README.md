@@ -8,9 +8,10 @@
 ```text
 .
 ├── data/
-│   └── gakg_subset.parquet  # GAKG 数据子集
+│   └── gakg_*.parquet       # GAKG 知识图谱
 ├── app.py                   # 基于 Flask 的 Web 界面
 ├── main.py                  # 搜索增强主程序
+├── download_data.py         # 数据下载脚本 (Hugging Face)
 ├── pagerank.py              # PageRank 算法实现
 └── requirements.txt
 ```
@@ -22,6 +23,11 @@
 ```bash
 pip install -r requirements.txt
 ```
+
+### 下载知识图谱
+由于数据集较大，请运行 `download_data.py` 脚本从 Hugging Face 下载所需的 Parquet 文件：
+
+> 注：脚本默认配置了本地代理 `http://127.0.0.1:7890`，如需使用代理，请检查脚本中的 `PROXIES` 变量是否需要修改
 
 ### 启用搜索
 - 终端运行：`main.py`
@@ -41,7 +47,4 @@ pip install -r requirements.txt
     1. 统计每篇论文关键词/概念与拓展词集合的交叉；如果有交集，则说明和图谱邻域有关。
     2. 以引用次数为主要排序指标（`cited_by_count`），其中与图谱交叉的文献排在前面，未命中的文献在其后。
 
-## 注意事项
-
-- 提供的 GAKG 子集主要涵盖地学领域。搜索非地学关键词可能无法获得有效的增强效果（得分为 0）。
-- PageRank 算法复用了 `hw3-link-analysis-release` 中实现的代码。
+> 温馨提示：GAKG 知识图谱主要涵盖地学领域。搜索非地学关键词可能无法获得有效的增强效果（得分为 0）。
