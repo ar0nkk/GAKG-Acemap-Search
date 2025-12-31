@@ -44,4 +44,4 @@ pip install -r requirements.txt
 ## 注意事项
 
 - 提供的 GAKG 子集主要涵盖地学领域。搜索非地学关键词可能无法获得有效的增强效果（得分为 0）。
-- PageRank 算法复用了` hw3-link-analysis-release` 中实现的代码。
+- PageRank 算法复用了 `hw3-link-analysis-release` 中实现的代码。
