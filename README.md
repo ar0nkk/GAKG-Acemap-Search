@@ -1,6 +1,6 @@
 # 基于 GAKG 知识图谱的 Acemap 搜索增强
 
-本项目利用 GAKG（地学学术知识图谱）对 Acemap 的搜索功能进行增强。它先用知识图谱扩展用户输入词，再在返回论文中筛选那些和图谱邻域有交集的条目，并在此基础上保留以被引量为主要排序指标的结果列表。
+本项目利用 GAKG（地学学术知识图谱）对 Acemap 的搜索功能进行增强。
 ![demo](https://cdn.jsdelivr.net/gh/ar0nkk/imgs@main/demo/image.png)
 
 ## 项目结构
