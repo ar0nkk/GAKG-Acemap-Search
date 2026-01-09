@@ -16,6 +16,11 @@ def download_file(url, dest_path):
     try:
         # 自动获取系统代理配置 (Windows 注册表或环境变量)
         proxies = urllib.request.getproxies()
+        
+        # 修复本地代理 SSL 问题：将 https 代理的协议头强制改为 http
+        if proxies and 'https' in proxies and proxies['https'].startswith('https://'):
+             proxies['https'] = proxies['https'].replace('https://', 'http://')
+
         if proxies:
             print(f"  Using detected proxies: {proxies}")
         
