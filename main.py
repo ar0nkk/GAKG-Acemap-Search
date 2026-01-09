@@ -6,10 +6,10 @@ import os
 import glob
 from functools import lru_cache
 
-from config import CLEAN_MIN_DEGREE, CLEAN_MAX_TOKEN_LEN
+from config import CLEAN_MIN_DEGREE, CLEAN_MAX_TOKEN_LEN, DATA_DIR
 
 # Configuration
-GAKG_PATH = 'd:/Syncdisk/SJTU/DataMining/pilot/GAKG_Acemap_Search_Enhancement/data'
+GAKG_PATH = DATA_DIR
 ACEMAP_API_URL = 'https://acemap.info/api/v1/work/search'
 
 def clean_gakg(gakg_df, min_degree: int = CLEAN_MIN_DEGREE, max_token_len: int = CLEAN_MAX_TOKEN_LEN):

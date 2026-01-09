@@ -50,8 +50,6 @@ OPENAI_API_KEY=你的密钥
 # 可选：自定义 API Base / 模型
 # OPENAI_API_BASE=https://...
 # MODEL_NAME=gpt-4o-mini        # 全局模型名称
-# AI_INTENT_MODEL=gpt-4o-mini   # 意图识别专用模型，优先级高于 MODEL_NAME
-# AI_RAG_MODEL=gpt-4o-mini      # RAG 回答专用模型，优先级高于 MODEL_NAME
 ```
 
 若使用 DashScope 兼容模式（如 DeepSeek）：
@@ -59,9 +57,6 @@ OPENAI_API_KEY=你的密钥
 OPENAI_API_KEY=你的密钥
 OPENAI_API_BASE=https://dashscope.aliyuncs.com/compatible-mode/v1
 MODEL_NAME=deepseek-v3.2-exp
-# 或分别指定
-# AI_INTENT_MODEL=deepseek-v3.2-exp
-# AI_RAG_MODEL=deepseek-v3.2-exp
 ```
 
 `MODEL_API_BASE` 也被接受为 `OPENAI_API_BASE` 的别名。
