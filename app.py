@@ -14,10 +14,10 @@ from agent import AIIntentParser, RAGResearchAssistant
 
 # Page configuration
 st.set_page_config(
-    page_title="GAKG Acemap Search Enhancement",
-    page_icon="🔍",
+    page_title="GAKG Nexus | Acemap Search",
+    page_icon="🌌",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 
@@ -38,15 +38,170 @@ def get_rag_assistant():
 
 GAKG_DF = get_gakg_data()
 
-# Custom CSS
+# Custom CSS - Modern Dark Theme
 st.markdown(
     """
     <style>
-    .block-container { max-width: 1100px; margin: 0 auto; }
-    .main { padding: 1rem; }
-    .hint { color: #bbb; font-size: 0.9rem; font-style: italic; margin-top: 0.25rem; }
-    .pill { display: inline-block; background: #222; color: #ddd; padding: 0.3rem 0.6rem; border-radius: 12px; font-size: 0.85rem; margin-right: 0.5rem; margin-bottom: 0.25rem; }
-    .overlap { color: #86c5ff; font-size: 0.9rem; margin-top: 0.35rem; }
+    /* Global Theme */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+    
+    .stApp {
+        background: radial-gradient(circle at 10% 20%, #1a1c24 0%, #0f1016 90%);
+        color: #e0e0e0;
+    }
+
+    /* Constraints layout width */
+    .block-container {
+        max-width: 1200px;
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        margin: auto;
+    }
+
+    /* Titles & Headers */
+    h1, h2, h3 {
+        color: #ffffff;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+    }
+
+    /* Hide "Press Enter to submit form" hint */
+    [data-testid="InputInstructions"] {
+        display: none !important;
+    }
+    
+    h1 {
+        background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-size: 2.5rem !important;
+        padding-bottom: 0.5rem;
+    }
+
+    /* Custom Cards */
+    .paper-card {
+        background: rgba(30, 34, 45, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+        backdrop-filter: blur(10px);
+    }
+    
+    .paper-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+        background: rgba(40, 44, 55, 0.8);
+        border-color: rgba(79, 172, 254, 0.4);
+    }
+
+    .paper-title {
+        font-size: 1.15rem;
+        font-weight: 600;
+        color: #64b5f6;
+        text-decoration: none;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+    
+    .paper-title:hover {
+        text-decoration: underline;
+        color: #9be7ff;
+    }
+
+    .paper-meta {
+        font-size: 0.85rem;
+        color: #a0a0b0;
+        margin-bottom: 0.8rem;
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .meta-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+    }
+
+    .paper-abstract {
+        font-size: 0.9rem;
+        color: #cfcfde;
+        line-height: 1.5;
+        margin-top: 0.5rem;
+        border-left: 3px solid #4facfe;
+        padding-left: 0.8rem;
+    }
+
+    /* Pills / Tags */
+    .pill-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .pill {
+        background: linear-gradient(135deg, #2b3242 0%, #1e222d 100%);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #00f2fe;
+        padding: 0.4rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    
+    .overlap-tag {
+        background: rgba(79, 172, 254, 0.15);
+        color: #86c5ff;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        border: 1px solid rgba(79, 172, 254, 0.3);
+        margin-top: 0.5rem;
+        display: inline-block;
+    }
+
+    /* Sidebar Customization */
+    [data-testid="stSidebar"] {
+        background-color: #111319;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    /* Inputs */
+    .stTextInput input, .stSelectbox > div > div {
+        background-color: #1e222d !important;
+        color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+    
+    .stButton button {
+        background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+        color: #000;
+        font-weight: 700;
+        border: none;
+        transition: opacity 0.2s;
+    }
+    .stButton button:hover {
+        opacity: 0.9;
+        color: #000;
+    }
+    
+    /* Metrics */
+    .score-badge {
+        background-color: rgba(0, 255, 128, 0.1);
+        color: #00ff80;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: bold;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -64,7 +219,56 @@ def build_paper_link(paper: Dict) -> str:
     return url or "#"
 
 
+def render_paper_card(paper: Dict, is_overlap: bool = False):
+    """Render a beautiful card for a paper result using HTML."""
+    link = build_paper_link(paper)
+    title = paper.get('title', 'Untitled')
+    year = paper.get("publication_year", "N/A")
+    score = paper.get("enhancement_score", 0)
+    cited_by = paper.get("cited_by_count", 0) or 0
+    rank = paper.get("rank_index", "?")
+    
+    author_list = paper.get("author_names", [])[:3]
+    if len(paper.get("author_names", [])) > 3:
+        author_list.append("et al.")
+    authors = ", ".join(author_list)
+    
+    inst_list = paper.get("affiliation_names", [])[:1]
+    insts = ", ".join(inst_list)
+    
+    abstract = get_abstract_preview(paper)
+    if abstract:
+        # Strip the markdown prefix if present in the preview function
+        abstract = abstract.replace("**Abstract:**", "").strip()
+
+    overlap_html = ""
+    if paper.get("overlapping_keywords"):
+        overlap_str = ", ".join(paper["overlapping_keywords"])
+        overlap_html = f'<div class="overlap-tag">🔗 Overlap: {overlap_str}</div>'
+
+    score_badge = f'<span class="score-badge">Score: {score:.4f}</span>' if is_overlap else ""
+
+    html = f"""
+    <div class="paper-card">
+        <a href="{link}" target="_blank" class="paper-title">{rank}. {title}</a>
+        <div class="paper-meta">
+            <span class="meta-tag">📅 {year}</span>
+            <span class="meta-tag">⭐ {cited_by} Citations</span>
+            {f'<span class="meta-tag">{score_badge}</span>' if score_badge else ''}
+        </div>
+        <div class="paper-meta" style="color: #889;">
+            {f'<span class="meta-tag">👤 {authors}</span>' if authors else ''}
+            {f'<span class="meta-tag">🏛️ {insts}</span>' if insts else ''}
+        </div>
+        {f'<div class="paper-abstract">{abstract}</div>' if abstract else ''}
+        {overlap_html}
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+
 def extract_authors_affiliations(paper: Dict) -> Tuple[List[str], List[str]]:
+
     """Extract author and affiliation names from varied schema fields."""
     authors: List[str] = []
     insts: List[str] = []

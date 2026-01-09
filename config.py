@@ -5,7 +5,8 @@ from openai import OpenAI
 load_dotenv()
 
 # API 配置，不配置也能使用普通搜索功能
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# 你需要在根目录创建一个 .env 文件，写上 OPENAI_API_KEY="你的密钥"，并检查下面的模型配置
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") #
 OPENAI_API_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 MODEL_NAME = "deepseek-v3.2"
 
