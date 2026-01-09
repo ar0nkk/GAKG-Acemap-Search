@@ -2,5 +2,7 @@ pandas
 numpy
 requests
 pyarrow
-flask
+streamlit
 tqdm
+openai
+python-dotenv

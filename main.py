@@ -25,12 +25,18 @@ def load_gakg(data_dir):
         for chunk_path in full_chunks:
             try:
                 print(f"  Loading {os.path.basename(chunk_path)}...")
-                dfs.append(pd.read_parquet(chunk_path))
+                # Optimization: Only load necessary columns to save memory and time
+                dfs.append(pd.read_parquet(chunk_path, columns=['subject', 'object']))
             except Exception as e:
                 print(f"  Error loading {chunk_path}: {e}")
         
         if dfs:
             combined_df = pd.concat(dfs, ignore_index=True)
+            print("Optimizing GAKG dataframe...")
+            # Optimization: Pre-lowercase strings to speed up search queries significantly
+            combined_df['subject'] = combined_df['subject'].astype(str).str.lower()
+            combined_df['object'] = combined_df['object'].astype(str).str.lower()
+            
             print(f"Successfully loaded GAKG dataset with {len(combined_df)} triples.")
             return combined_df
     
@@ -49,9 +55,10 @@ def get_weighted_neighbors_pagerank(gakg_df, keyword, top_k=20):
     # and then find connections between them to build a local graph.
     
     # Find 1-hop neighbors
-    subjects = gakg_df[gakg_df['subject'].str.lower() == keyword]['object'].tolist()
-    objects = gakg_df[gakg_df['object'].str.lower() == keyword]['subject'].tolist()
-    neighbors = set([n.lower() for n in subjects + objects])
+    # Since df is pre-lowercased, we can check for equality directly
+    subjects = gakg_df[gakg_df['subject'] == keyword]['object'].tolist()
+    objects = gakg_df[gakg_df['object'] == keyword]['subject'].tolist()
+    neighbors = set(subjects + objects)
     neighbors.add(keyword) # Include the keyword itself
     
     if not neighbors:
@@ -75,8 +82,8 @@ def get_weighted_neighbors_pagerank(gakg_df, keyword, top_k=20):
     # Let's assume the GAKG is mostly consistent or we lowercased it.
     # For this demo, we'll do a slow but correct filtering.
     
-    mask_sub = gakg_df['subject'].str.lower().isin(neighbors)
-    mask_obj = gakg_df['object'].str.lower().isin(neighbors)
+    mask_sub = gakg_df['subject'].isin(neighbors)
+    mask_obj = gakg_df['object'].isin(neighbors)
     subgraph_df = gakg_df[mask_sub & mask_obj]
     
     if len(subgraph_df) == 0:
@@ -92,8 +99,8 @@ def get_weighted_neighbors_pagerank(gakg_df, keyword, top_k=20):
     adj_matrix = np.zeros((n_nodes, n_nodes))
     
     for _, row in subgraph_df.iterrows():
-        u = row['subject'].lower()
-        v = row['object'].lower()
+        u = row['subject'] # already lower
+        v = row['object']
         if u in node_to_idx and v in node_to_idx:
             idx_u = node_to_idx[u]
             idx_v = node_to_idx[v]
@@ -123,22 +130,82 @@ def get_weighted_neighbors_pagerank(gakg_df, keyword, top_k=20):
                 
     return result
 
-def get_neighbors(gakg_df, keyword):
+def search_acemap(keyword, page=1, size=10, sort=None, order='desc'):
     """
-    Finds 1-hop neighbors of the keyword in the GAKG graph.
-    Returns a set of neighbor nodes.
+    Searches Acemap for the keyword.
+    If sort is provided, fetches more results and sorts them client-side.
+    Sort column options: 'cited_by_count', 'publication_date'
     """
-    # This function is kept for reference but we will use the weighted version.
-    return set(get_weighted_neighbors_pagerank(gakg_df, keyword).keys())
-
-def search_acemap(keyword, page=1, size=10):
-    """Searches Acemap for the keyword."""
+    
+    # Base params
     params = {
         'keyword': keyword,
-        'order': 'desc',
+        'order': order,
         'page': page,
         'size': size
     }
+    
+    # If client-side sorting is requested by providing 'sort' argument
+    # (Note: 'sort' here currently supports 'cited_by_count' or 'publication_date')
+    if sort:
+        print(f"Enhanced search with sort='{sort}'...")
+        # Strategy: Fetch up to 200 items to enable decent client-side sorting
+        target_count = max(page * size, 200)
+        target_count = min(target_count, 500) # Cap at 500
+        
+        all_results = []
+        current_page = 1
+        max_page_size = 100
+        
+        try:
+           # Pagination loop
+           while len(all_results) < target_count:
+               batch_params = {
+                   'keyword': keyword,
+                   'order': order,
+                   'page': current_page,
+                   'size': max_page_size
+               }
+               # Proxies trick
+               proxies = {"http": None, "https": None}
+               print(f"  Fetching page {current_page}...")
+               response = requests.get(ACEMAP_API_URL, params=batch_params, headers=HEADERS, proxies=proxies, timeout=15)
+               response.raise_for_status()
+               data = response.json()
+               results = data.get('results', [])
+               
+               if not results:
+                   break
+                   
+               all_results.extend(results)
+               if len(results) < max_page_size:
+                   break # End of results
+               current_page += 1
+               
+           # Sort in memory
+           reverse = (order == 'desc')
+           if sort == 'cited_by_count':
+               all_results.sort(key=lambda x: x.get('cited_by_count', 0) or 0, reverse=reverse)
+           elif sort == 'publication_date':
+               # Use publication_date or year
+               all_results.sort(key=lambda x: str(x.get('publication_date', '') or x.get('publication_year', '')), reverse=reverse)
+               
+           # If paginating client-side here? 
+           # Be careful: if page/size is passed, caller might expect paginated results.
+           # But app.py handles pagination locally.
+           # Let's return the full sorted list if it matches the requested logic, 
+           # OR slice it if page/size was intended for the final output.
+           # app.py calls search_acemap(term, page=1, size=60).
+           # So we should return the top 'size' items from the sorted list.
+           
+           if len(all_results) > size:
+               return all_results[:size]
+           return all_results
+           
+        except Exception as e:
+            print(f"Error in enhanced search: {e}")
+            return []
+
     try:
         # Attempt to bypass system proxy which often causes issues on Windows
         proxies = {"http": None, "https": None}

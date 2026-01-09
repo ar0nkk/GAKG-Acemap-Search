@@ -1,8 +1,8 @@
-import os
-import threading
-import webbrowser
-from typing import List, Dict, Tuple
-from flask import Flask, request, render_template_string
+import streamlit as st
+import concurrent.futures
+import ast
+from typing import List, Dict, Tuple, Optional
+
 from main import (
     load_gakg,
     get_weighted_neighbors_pagerank,
@@ -10,114 +10,51 @@ from main import (
     enhance_search_results,
     GAKG_PATH,
 )
+from ai_intent import AIIntentParser, RAGResearchAssistant
 
-# Load GAKG once at startup
-GAKG_DF = load_gakg(GAKG_PATH)
+# Page configuration
+st.set_page_config(
+    page_title="GAKG Acemap Search Enhancement",
+    page_icon="🔍",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
-app = Flask(__name__)
 
-TEMPLATE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GAKG Acemap Search Enhancement</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f5f6fb; color: #222; }
-    header { background: linear-gradient(135deg, #0f4c75, #3282b8); color: #fff; padding: 16px 20px; }
-    header h1 { margin: 0; font-size: 20px; }
-    main { max-width: 1100px; margin: 0 auto; padding: 20px; }
-    form { margin: 16px 0; display: flex; gap: 12px; }
-    input[type=text] { flex: 1; padding: 10px 12px; font-size: 16px; border: 1px solid #ccd1d9; border-radius: 6px; }
-    button { padding: 10px 16px; font-size: 15px; background: #0f4c75; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
-    button:hover { background: #0c3d5f; }
-    .hint { color: #555; font-size: 13px; margin-top: 4px; }
-    .section { margin-top: 24px; }
-    .section h2 { margin: 0 0 8px 0; font-size: 18px; color: #0f4c75; }
-    .card { background: #fff; border: 1px solid #e3e6ed; border-radius: 8px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
-    .title { font-weight: 600; font-size: 15px; margin: 0 0 6px 0; }
-    .meta { color: #555; font-size: 13px; margin-bottom: 6px; }
-    .overlap { color: #0f4c75; font-size: 13px; }
-    .tag { display: inline-block; background: #eef5fb; color: #0f4c75; padding: 4px 8px; border-radius: 12px; font-size: 12px; margin-right: 6px; }
-    .pill { display: inline-block; background: #f1f3f6; color: #444; padding: 4px 8px; border-radius: 12px; font-size: 12px; margin-right: 6px; }
-    a { color: #0f4c75; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    .empty { color: #777; font-size: 14px; }
-    .pagination { margin-top: 30px; display: flex; align-items: center; justify-content: center; gap: 10px; }
-    .pagination a { padding: 8px 16px; border-radius: 6px; background: #0f4c75; color: #fff; text-decoration: none; font-weight: 500; }
-    .pagination a:hover { background: #0c3d5f; }
-    .pagination span { color: #555; font-size: 15px; font-weight: 600; }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>GAKG-based Acemap Search Enhancement</h1>
-  </header>
-  <main>
-    <form method="get" action="/">
-      <input type="text" name="q" placeholder="Search keyword (e.g., Plate Tectonics)" value="{{ query }}" />
-      <button type="submit">Search</button>
-    </form>
-    <div class="hint">Workflow: Query expansion (GAKG) + API results merge + knowledge-graph overlap + citation-based ordering.</div>
+@st.cache_resource
+def get_gakg_data():
+    return load_gakg(GAKG_PATH)
 
-    {% if expansion_terms %}
-      <div class="section">
-        <h2>Expanded terms</h2>
-        {% for term in expansion_terms %}<span class="pill">{{ term }}</span>{% endfor %}
-      </div>
-    {% endif %}
 
-    {% if relevant %}
-      <div class="section">
-        <h2>Relevant papers (graph-overlap, sorted by citations)</h2>
-        {% for paper in relevant %}
-          <div class=\"card\">
-            <p class="title">{{ paper.rank_index }}. [{{ paper.cited_by_count|default(0) }} cites] <a href="{{ paper.link }}" target="_blank" rel="noopener">{{ paper.title }}</a></p>
-            <div class="meta">Year: {{ paper.publication_year|default('N/A') }} | Score: {{ '%.4f'|format(paper.enhancement_score) }}</div>
-            {% if paper.overlapping_keywords %}
-              <div class="overlap">Overlap: {{ paper.overlapping_keywords|join(', ') }}</div>
-            {% endif %}
-          </div>
-        {% endfor %}
-      </div>
-    {% else %}
-      {% if query %}<div class="section empty">No papers could be linked to the GAKG neighborhood.</div>{% endif %}
-    {% endif %}
+@st.cache_resource
+def get_ai_intent():
+    return AIIntentParser()
 
-    {% if others %}
-      <div class="section">
-        <h2>Other papers (sorted by citations)</h2>
-        {% for paper in others %}
-          <div class="card">
-            <p class="title">{{ paper.rank_index }}. [{{ paper.cited_by_count|default(0) }} cites] <a href="{{ paper.link }}" target="_blank" rel="noopener">{{ paper.title }}</a></p>
-            <div class="meta">Year: {{ paper.publication_year|default('N/A') }}</div>
-          </div>
-        {% endfor %}
-      </div>
-    {% endif %}
 
-    {% if not relevant and not others and query %}
-      <div class="section empty">No papers found.</div>
-    {% endif %}
+@st.cache_resource
+def get_rag_assistant():
+    return RAGResearchAssistant()
 
-    {% if query %}
-    <div class="pagination">
-      {% if page > 1 %}
-        <a href="?q={{ query|urlencode }}&page={{ page - 1 }}">← Previous</a>
-      {% endif %}
-      <span>Page {{ page }}</span>
-      <a href="?q={{ query|urlencode }}&page={{ page + 1 }}">Next →</a>
-    </div>
-    {% endif %}
-  </main>
-</body>
-</html>
-"""
+
+GAKG_DF = get_gakg_data()
+
+# Custom CSS
+st.markdown(
+    """
+    <style>
+    .block-container { max-width: 1100px; margin: 0 auto; }
+    .main { padding: 1rem; }
+    .hint { color: #bbb; font-size: 0.9rem; font-style: italic; margin-top: 0.25rem; }
+    .pill { display: inline-block; background: #222; color: #ddd; padding: 0.3rem 0.6rem; border-radius: 12px; font-size: 0.85rem; margin-right: 0.5rem; margin-bottom: 0.25rem; }
+    .overlap { color: #86c5ff; font-size: 0.9rem; margin-top: 0.35rem; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 def build_paper_link(paper: Dict) -> str:
-    # Prefer landing page, then DOI, then Acemap paper page.
+    """Build a clickable link for a paper."""
     primary = paper.get("primary_location") or {}
     url = primary.get("landing_page_url")
     if not url and paper.get("doi"):
@@ -127,100 +64,500 @@ def build_paper_link(paper: Dict) -> str:
     return url or "#"
 
 
-def run_enhanced_pipeline(keyword: str, page: int) -> Tuple[List[Dict], List[Dict], List[str]]:
+def extract_authors_affiliations(paper: Dict) -> Tuple[List[str], List[str]]:
+    """Extract author and affiliation names from varied schema fields."""
+    authors: List[str] = []
+    insts: List[str] = []
+
+    def _pick_name(obj: Dict) -> Optional[str]:
+        return obj.get("display_name") or obj.get("name") or obj.get("author") or obj.get("fullname")
+
+    def _clean_name(val: Optional[str]) -> Optional[str]:
+        if val is None:
+            return None
+        s = str(val).strip()
+        if not s:
+            return None
+        if "{" in s or "}" in s:
+            return None
+        if s.lower().startswith("id:"):
+            return None
+        # Strip surrounding quotes/brackets that come from list-like strings
+        if s.startswith("[") and s.endswith("]"):
+            s = s[1:-1].strip()
+        if s.startswith("'") and s.endswith("'"):
+            s = s[1:-1].strip()
+        if s.startswith('"') and s.endswith('"'):
+            s = s[1:-1].strip()
+        return s or None
+
+    auth_list = paper.get("authorships") or paper.get("authors") or []
+    if isinstance(auth_list, list):
+        for a in auth_list:
+            if isinstance(a, dict):
+                name = _clean_name(_pick_name(a))
+                # OpenAlex-style: nested author dict inside authorships
+                if not name and isinstance(a.get("author"), dict):
+                    name = _clean_name(_pick_name(a["author"]))
+                if name:
+                    authors.append(name)
+                for inst in a.get("institutions") or a.get("affiliations") or []:
+                    if isinstance(inst, dict):
+                        iname = _clean_name(_pick_name(inst))
+                        if iname:
+                            insts.append(iname)
+            elif isinstance(a, str):
+                s = a.strip()
+                parsed = None
+                if s.startswith("[") and s.endswith("]"):
+                    try:
+                        parsed = ast.literal_eval(s)
+                    except Exception:
+                        parsed = None
+                if isinstance(parsed, list):
+                    for item in parsed:
+                        name = _clean_name(item)
+                        if name:
+                            authors.append(name)
+                else:
+                    name = _clean_name(s)
+                    if name:
+                        authors.append(name)
+            # ignore non-str, non-dict entries
+
+    # Fallbacks
+    if not authors and isinstance(paper.get("author"), str):
+        val = _clean_name(paper.get("author"))
+        if val:
+            authors.append(val)
+    if not authors and isinstance(paper.get("author"), list):
+        for a in paper.get("author", []):
+            name = _clean_name(_pick_name(a) if isinstance(a, dict) else a)
+            if name:
+                authors.append(name)
+    if paper.get("institutions") and isinstance(paper["institutions"], list):
+        for inst in paper["institutions"]:
+            if isinstance(inst, dict):
+                iname = _clean_name(_pick_name(inst))
+                if iname:
+                    insts.append(iname)
+            elif isinstance(inst, str):
+                s = inst.strip()
+                parsed = None
+                if s.startswith("[") and s.endswith("]"):
+                    try:
+                        parsed = ast.literal_eval(s)
+                    except Exception:
+                        parsed = None
+                if isinstance(parsed, list):
+                    for item in parsed:
+                        iname = _clean_name(item)
+                        if iname:
+                            insts.append(iname)
+                else:
+                    iname = _clean_name(s)
+                    if iname:
+                        insts.append(iname)
+
+    # Deduplicate while preserving order
+    def _dedup(seq: List[str]) -> List[str]:
+        seen = set()
+        out = []
+        for s in seq:
+            if s not in seen:
+                seen.add(s)
+                out.append(s)
+        return out
+
+    return _dedup(authors), _dedup(insts)
+
+
+def get_abstract_preview(paper: Dict, max_chars: int = 260) -> str:
+    """Return a short abstract preview if available."""
+    abstract = paper.get("abstract") or paper.get("abstract_text")
+    if isinstance(abstract, str) and abstract.strip():
+        text = abstract.strip()
+        return text if len(text) <= max_chars else text[: max_chars - 3] + "..."
+
+    inv = paper.get("abstract_inverted_index")
+    if isinstance(inv, dict) and inv:
+        # Reconstruct abstract from inverted index (OpenAlex-style)
+        positions = []
+        for word, idxs in inv.items():
+            for i in idxs:
+                positions.append((i, word))
+        if positions:
+            max_pos = max(i for i, _ in positions)
+            tokens = [""] * (max_pos + 1)
+            for i, w in positions:
+                tokens[i] = w
+            text = " ".join(t for t in tokens if t)
+            text = text.strip()
+            return text if len(text) <= max_chars else text[: max_chars - 3] + "..."
+    return ""
+
+
+def run_enhanced_pipeline(
+    keyword: str,
+    page: int,
+    sort_option: str,
+    author_filter: str = "",
+    affiliation_filter: str = "",
+    neighbor_threshold: float = 0.0,
+) -> Tuple[List[Dict], List[Dict], List[str]]:
+    """Run the enhanced search pipeline with sorting. Keyword is already LLM-parsed."""
     if GAKG_DF is None:
         return [], [], []
 
-    # 1) Neighborhood + expansion terms
-    weighted_neighbors = get_weighted_neighbors_pagerank(GAKG_DF, keyword)
-    sorted_neighbors = sorted(weighted_neighbors.items(), key=lambda x: x[1], reverse=True)
+    api_sort = None
+    if sort_option == "Most Cited":
+        api_sort = "cited_by_count"
+    elif sort_option == "Latest Published":
+        api_sort = "publication_date"
+
+    # 1) Neighborhood + expansion terms from GAKG (keyword already parsed by LLM)
+    core_keyword = keyword
+    weighted_neighbors = get_weighted_neighbors_pagerank(GAKG_DF, core_keyword)
+    # Apply threshold to expansion candidates
+    sorted_neighbors = [
+        (term, score)
+        for term, score in sorted(weighted_neighbors.items(), key=lambda x: x[1], reverse=True)
+        if score >= neighbor_threshold
+    ]
+    # If the threshold is maxed (~1), skip expansion terms
+    if neighbor_threshold >= 0.999:
+        sorted_neighbors = []
     expansion_terms: List[str] = []
     for term, _ in sorted_neighbors:
-        if term.lower() != keyword.lower():
+        if term.lower() != core_keyword.lower():
             expansion_terms.append(term)
         if len(expansion_terms) >= 3:
             break
 
-    # 2) Fetch results: fetch a larger pool (e.g. 100) to allow global sorting
-    # We ignore the 'page' param for the API call to ensure we get the top global results
-    # and then paginate locally.
+    # 2) Fetch results (parallel)
     results_map: Dict[str, Dict] = {}
-    # Fetch more results for the main keyword to ensure high recall of top papers
-    for term, size in [(keyword, 60)] + [(t, 20) for t in expansion_terms]:
-      # Always fetch page 1 from API with larger size to get candidates
-      api_results = search_acemap(term, page=1, size=size)
-      for p in api_results:
-        pid = p.get("id") or p.get("title")
-        if pid and pid not in results_map:
-          results_map[pid] = p
+    # Increase fetch sizes to broaden recall before reranking
+    queries_to_run = [(core_keyword, 100)] + [(t, 40) for t in expansion_terms]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_term = {
+            executor.submit(search_acemap, term, page=1, size=size, sort=api_sort): term
+            for term, size in queries_to_run
+        }
+        for future in concurrent.futures.as_completed(future_to_term):
+            try:
+                api_results = future.result()
+                for p in api_results:
+                    pid = p.get("id") or p.get("title")
+                    if pid and pid not in results_map:
+                        results_map[pid] = p
+            except Exception as exc:
+                term = future_to_term[future]
+                print(f"Search failed for term {term}: {exc}")
+
     merged_results = list(results_map.values())
 
     # 3) Enrich with graph overlap
     enhanced = enhance_search_results(merged_results, weighted_neighbors)
 
-    # 4) Global Sort: graph-overlap first (by citations), then the rest (by citations)
-    citation_sort = lambda paper: (paper.get('cited_by_count', 0) or 0)
-    
-    all_relevant = sorted([p for p in enhanced if p['has_graph_overlap']], key=citation_sort, reverse=True)
-    all_others = sorted([p for p in enhanced if not p['has_graph_overlap']], key=citation_sort, reverse=True)
-    
-    # Combine for pagination
-    full_list = all_relevant + all_others
-    
-    # Assign global rank index before slicing
-    for idx, p in enumerate(full_list):
-        p['rank_index'] = idx + 1
-        p['link'] = build_paper_link(p)
+    # 4) Global Sort (by user-selected criterion)
+    def _date_key(p: Dict) -> int:
+        date_str = p.get("publication_date") or ""
+        if date_str:
+            try:
+                # Expect YYYY-MM-DD; fallback to year if parsing fails
+                return int(date_str.replace("-", "")[:8])
+            except Exception:
+                pass
+        year = p.get("publication_year")
+        try:
+            return int(year)
+        except Exception:
+            return 0
 
-    # 5) Paginate locally
+    def get_secondary_sort(p):
+        if sort_option == "Latest Published":
+            return _date_key(p)
+        return p.get("cited_by_count", 0) or 0
+
+    # Enrich with author/affiliation metadata
+    for p in enhanced:
+        authors, insts = extract_authors_affiliations(p)
+        p["author_names"] = authors
+        p["affiliation_names"] = insts
+
+    # Apply author / affiliation filters (case-insensitive substring match)
+    a_f = (author_filter or "").strip().lower()
+    inst_f = (affiliation_filter or "").strip().lower()
+
+    def _match_filters(p: Dict) -> bool:
+        if a_f:
+            names = [n.lower() for n in p.get("author_names", [])]
+            if not any(a_f in n for n in names):
+                return False
+        if inst_f:
+            insts = [n.lower() for n in p.get("affiliation_names", [])]
+            if not any(inst_f in n for n in insts):
+                return False
+        return True
+
+    filtered = [p for p in enhanced if _match_filters(p)]
+
+    # Sort purely by the selected option (date or citations)
+    enhanced_sorted = sorted(filtered, key=get_secondary_sort, reverse=True)
+
+    full_list = enhanced_sorted
+    for idx, p in enumerate(full_list):
+        p["rank_index"] = idx + 1
+        p["link"] = build_paper_link(p)
+
     PER_PAGE = 20
     start_idx = (page - 1) * PER_PAGE
     end_idx = start_idx + PER_PAGE
-    
     page_items = full_list[start_idx:end_idx]
-    
-    # Split back into relevant/others for display
-    page_relevant = [p for p in page_items if p['has_graph_overlap']]
-    page_others = [p for p in page_items if not p['has_graph_overlap']]
+    page_relevant = [p for p in page_items if p["has_graph_overlap"]]
+    page_others = [p for p in page_items if not p["has_graph_overlap"]]
 
     return page_relevant, page_others, expansion_terms
 
 
-@app.route("/", methods=["GET"])
-def index():
-  query = (request.args.get("q") or "").strip()
-  raw_page = request.args.get("page", "1")
-  try:
-    page = max(1, int(raw_page))
-  except ValueError:
-    page = 1
-
-  relevant: List[Dict] = []
-  others: List[Dict] = []
-  expansion_terms: List[str] = []
-
-  if query:
-    relevant, others, expansion_terms = run_enhanced_pipeline(query, page)
-
-  return render_template_string(
-    TEMPLATE,
-    query=query,
-    page=page,
-    relevant=relevant,
-    others=others,
-    expansion_terms=expansion_terms,
-  )
+def _map_sort_label(sort_token: Optional[str]) -> str:
+    if sort_token == "citation":
+        return "Most Cited"
+    if sort_token == "date":
+        return "Latest Published"
+    return "Best Match"
 
 
-if __name__ == "__main__":
-  port = int(os.environ.get("PORT", 5000))
+def _update_query_state(raw_query: str):
+    parsed = get_ai_intent().parse(raw_query)
+    st.session_state.search_keyword = parsed.get("keyword") or raw_query
+    sort_token = parsed.get("sort")
+    st.session_state.intent_sort_token = sort_token or "relevance"
+    st.session_state.query_raw = raw_query
+    st.session_state.intent_explanation = parsed.get("explanation", "")
+    st.session_state.page = 1
+    st.session_state.rag_answer = None
 
-  def _open_browser():
-    # open the UI once the server is ready
-    webbrowser.open(f"http://127.0.0.1:{port}/")
 
-  # Prevent opening two windows when debug=True (reloader active)
-  if not os.environ.get("WERKZEUG_RUN_MAIN"):
-    threading.Timer(1.25, _open_browser).start()
+def _on_query_change():
+    """Sync parsed fields when the user edits the search box to avoid stale concat."""
+    current = (st.session_state.query_input or "").strip()
+    st.session_state.search_keyword = current
+    st.session_state.query_raw = current
+    st.session_state.rag_answer = None
+    st.session_state.intent_explanation = ""
+    st.session_state.intent_sort_token = "relevance"
 
-  app.run(host="0.0.0.0", port=port, debug=True)
+
+# UI Layout
+st.markdown("## 🔍 GAKG-based Acemap Search Enhancement", unsafe_allow_html=True)
+
+# Session state defaults
+if "page" not in st.session_state:
+    st.session_state.page = 1
+if "sort_option" not in st.session_state:
+    st.session_state.sort_option = "Most Cited"
+if "query_input" not in st.session_state:
+    st.session_state.query_input = ""
+if "query_raw" not in st.session_state:
+    st.session_state.query_raw = ""
+if "search_keyword" not in st.session_state:
+    st.session_state.search_keyword = ""
+if "rag_answer" not in st.session_state:
+    st.session_state.rag_answer = None
+if "intent_explanation" not in st.session_state:
+    st.session_state.intent_explanation = ""
+if "intent_sort_token" not in st.session_state:
+    st.session_state.intent_sort_token = "relevance"
+if "author_filter" not in st.session_state:
+    st.session_state.author_filter = ""
+if "affiliation_filter" not in st.session_state:
+    st.session_state.affiliation_filter = ""
+if "neighbor_threshold" not in st.session_state:
+    st.session_state.neighbor_threshold = 0.0
+
+
+# Search bar (Enter submits via form)
+with st.form("search_form"):
+    col1, col2, col3 = st.columns([3, 1, 1], vertical_alignment="bottom")
+    with col1:
+        st.text_input(
+            "Search keyword",
+            key="query_input",
+            placeholder="e.g., plate tectonics",
+            label_visibility="collapsed",
+        )
+    with col2:
+        st.selectbox(
+            "Sort",
+            ("Most Cited", "Latest Published"),
+            key="sort_option",
+        )
+    with col3:
+        search_button = st.form_submit_button("Search", use_container_width=True)
+
+    col4, col5, col6 = st.columns([1, 1, 1])
+    with col4:
+        st.text_input(
+            "Author (optional)",
+            key="author_filter",
+            placeholder="e.g., John Smith",
+        )
+    with col5:
+        st.text_input(
+            "Institution (optional)",
+            key="affiliation_filter",
+            placeholder="e.g., MIT",
+        )
+    with col6:
+        st.slider(
+            "Expansion limitation",
+            min_value=0.0,
+            max_value=1.0,
+            step=0.05,
+            key="neighbor_threshold",
+            help="Lower this if few results come back",
+        )
+
+# Display hint
+st.markdown(
+    '<p class="hint">💡 Workflow: LLM intent parsing + KG expansion + API merge + knowledge-graph overlap + citation/date sorting.</p>',
+    unsafe_allow_html=True,
+)
+
+# Handle search
+if search_button:
+    raw_query = (st.session_state.query_input or "").strip()
+    if raw_query:
+        with st.spinner("Understanding query with LLM..."):
+            _update_query_state(raw_query)
+    else:
+        st.session_state.query_raw = ""
+        st.session_state.search_keyword = ""
+        st.session_state.rag_answer = None
+        st.session_state.page = 1
+        st.session_state.intent_explanation = ""
+        st.session_state.intent_sort_token = "relevance"
+
+query_raw = st.session_state.query_raw
+core_keyword = st.session_state.search_keyword or st.session_state.query_input
+page = st.session_state.page
+sort_opt = st.session_state.sort_option
+author_filter = st.session_state.author_filter
+affiliation_filter = st.session_state.affiliation_filter
+neighbor_threshold = st.session_state.neighbor_threshold
+
+if core_keyword:
+    with st.spinner(f"Searching and processing results... (Sort: {sort_opt})"):
+        relevant, others, expansion_terms = run_enhanced_pipeline(
+            core_keyword,
+            page,
+            sort_opt,
+            author_filter=author_filter,
+            affiliation_filter=affiliation_filter,
+            neighbor_threshold=neighbor_threshold,
+        )
+
+    # AI Search Assistant: show LLM understanding + generate summary/suggestions
+    intent_sort_label = _map_sort_label(st.session_state.intent_sort_token)
+    with st.container(border=True):
+        st.markdown("#### 🧠 AI Search Assistant")
+        st.markdown(f"- Core query: **{core_keyword or '(empty)'}**")
+        exp = st.session_state.intent_explanation
+        if exp:
+            if exp == "fallback":
+                st.markdown("- Reasoning: LLM returned no explanation (maybe API missing or parsing failed); using raw query and default sorting.")
+            else:
+                st.markdown(f"- Reasoning: {exp}")
+
+        rag_disabled = not (relevant or others)
+        if st.button("Generate search tips & summary", key="rag_generate", disabled=rag_disabled):
+            with st.spinner("AI assistant is generating..."):
+                st.session_state.rag_answer = get_rag_assistant().answer(
+                    user_query=query_raw or core_keyword,
+                    keyword=core_keyword,
+                    expansion_terms=expansion_terms,
+                    relevant=relevant,
+                    others=others,
+                    language=query_raw.strip()[:1] if query_raw else None,
+                )
+        if rag_disabled:
+            st.caption("Search results are needed before generating an answer.")
+        if st.session_state.rag_answer:
+            st.markdown(st.session_state.rag_answer)
+
+    # Expansion terms
+    if expansion_terms:
+        st.markdown("### 📚 Expansion Terms")
+        term_html = " ".join([f'<span class="pill">{term}</span>' for term in expansion_terms])
+        st.markdown(term_html, unsafe_allow_html=True)
+
+    # Relevant papers
+    if relevant:
+        st.markdown(f"### ✨ Graph-overlap results (sorted by: {sort_opt})")
+        for paper in relevant:
+            with st.container(border=True):
+                cited_by = paper.get("cited_by_count", 0) or 0
+                title_html = f"**{paper.get('rank_index', '?')}. [{cited_by} cites] [{paper.get('title', 'Untitled')}]({paper.get('link', '#')})**"
+                st.markdown(title_html)
+
+                year = paper.get("publication_year", "N/A")
+                score = paper.get("enhancement_score", 0)
+                st.caption(f"Year: {year} | Score: {score:.4f}")
+                authors_line = ", ".join(paper.get("author_names", [])[:3])
+                insts_line = ", ".join(paper.get("affiliation_names", [])[:2])
+                if authors_line:
+                    st.caption(f"Authors: {authors_line}")
+                if insts_line:
+                    st.caption(f"Institutions: {insts_line}")
+                abstract_preview = get_abstract_preview(paper)
+                if abstract_preview:
+                    st.markdown(abstract_preview)
+
+                if paper.get("overlapping_keywords"):
+                    overlap_str = ", ".join(paper["overlapping_keywords"])
+                    st.markdown(f'<p class="overlap">Overlap: {overlap_str}</p>', unsafe_allow_html=True)
+
+    # Other papers
+    if others:
+        st.markdown(f"#### 📄 No graph overlap for the results below (sorted by: {sort_opt})")
+        for paper in others:
+            with st.container(border=True):
+                cited_by = paper.get("cited_by_count", 0) or 0
+                title_html = f"**{paper.get('rank_index', '?')}. [{cited_by} cites] [{paper.get('title', 'Untitled')}]({paper.get('link', '#')})**"
+                st.markdown(title_html)
+
+                year = paper.get("publication_year", "N/A")
+                st.caption(f"Year: {year}")
+                authors_line = ", ".join(paper.get("author_names", [])[:3])
+                insts_line = ", ".join(paper.get("affiliation_names", [])[:2])
+                if authors_line:
+                    st.caption(f"Authors: {authors_line}")
+                if insts_line:
+                    st.caption(f"Institutions: {insts_line}")
+                abstract_preview = get_abstract_preview(paper)
+                if abstract_preview:
+                    st.markdown(abstract_preview)
+
+    if not relevant and not others:
+        st.info("❌ No papers could be linked to the GAKG neighborhood.")
+
+    # Pagination
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col1:
+        if page > 1 and st.button("← Previous Page"):
+            st.session_state.page -= 1
+            st.rerun()
+    with col2:
+        st.markdown(
+            f"<p style='text-align: center; font-weight: bold;'>Page {page}</p>",
+            unsafe_allow_html=True,
+        )
+    with col3:
+        if st.button("Next Page →"):
+            st.session_state.page += 1
+            st.rerun()
+else:
+    st.info("👋 Enter a search keyword to get started!")
