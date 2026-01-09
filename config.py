@@ -13,7 +13,7 @@ MODEL_NAME = "deepseek-v3.2"
 USE_AI = os.getenv("USE_AI", "true").lower() == "true"
 
 # 数据/清洗参数
-DATA_DIR = "data/"
+DATA_DIR = "./data/"
 CLEAN_MIN_DEGREE = 2
 CLEAN_MAX_TOKEN_LEN = 120
 

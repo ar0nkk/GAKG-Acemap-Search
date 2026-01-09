@@ -2,6 +2,7 @@ import os
 import requests
 from tqdm import tqdm
 import urllib.request
+from config import DATA_DIR
 
 # Configuration
 BASE_URL = "https://huggingface.co/datasets/aronkk/gakg/resolve/main"
@@ -9,7 +10,6 @@ FILES = [
     "gakg_full_chunk_0000.parquet",
     "gakg_full_chunk_0001.parquet"
 ]
-DATA_DIR = "data"
 
 def download_file(url, dest_path):
     print(f"Downloading {url} to {dest_path}...")
