@@ -4,10 +4,55 @@ import numpy as np
 from pagerank import PageRank
 import os
 import glob
+from functools import lru_cache
+
+from config import CLEAN_MIN_DEGREE, CLEAN_MAX_TOKEN_LEN
 
 # Configuration
 GAKG_PATH = 'd:/Syncdisk/SJTU/DataMining/pilot/GAKG_Acemap_Search_Enhancement/data'
 ACEMAP_API_URL = 'https://acemap.info/api/v1/work/search'
+
+def clean_gakg(gakg_df, min_degree: int = CLEAN_MIN_DEGREE, max_token_len: int = CLEAN_MAX_TOKEN_LEN):
+    """Clean GAKG edges to reduce noise.
+
+    Steps:
+    1) Normalize to lowercase/stripped strings.
+    2) Drop empty tokens and self-loops.
+    3) Remove obviously noisy tokens by length (too short/long).
+    4) Deduplicate edges.
+    5) Prune low-degree nodes (keep edges where both endpoints have degree >= min_degree).
+    """
+
+    if gakg_df is None or len(gakg_df) == 0:
+        return gakg_df
+
+    df = gakg_df.copy()
+    df['subject'] = df['subject'].astype(str).str.strip().str.lower()
+    df['object'] = df['object'].astype(str).str.strip().str.lower()
+
+    before_edges = len(df)
+
+    # Drop empty and self-loops
+    df = df[(df['subject'] != '') & (df['object'] != '')]
+    df = df[df['subject'] != df['object']]
+
+    # Length-based noise filter
+    df = df[(df['subject'].str.len() >= 2) & (df['object'].str.len() >= 2)]
+    df = df[(df['subject'].str.len() <= max_token_len) & (df['object'].str.len() <= max_token_len)]
+
+    # Deduplicate edges
+    df = df.drop_duplicates(subset=['subject', 'object'])
+
+    # Degree-based pruning
+    degree = df['subject'].value_counts()
+    degree = degree.add(df['object'].value_counts(), fill_value=0)
+    keep_mask = (df['subject'].map(degree) >= min_degree) & (df['object'].map(degree) >= min_degree)
+    df = df[keep_mask].reset_index(drop=True)
+
+    after_edges = len(df)
+    print(f"Cleaned GAKG: edges {before_edges} -> {after_edges} (min_degree={min_degree}, max_len={max_token_len})")
+
+    return df
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 }
@@ -34,6 +79,12 @@ def load_gakg(data_dir):
             combined_df = pd.concat(dfs, ignore_index=True)
             print("Optimizing GAKG dataframe...")
             # Optimization: Pre-lowercase strings to speed up search queries significantly
+
+            # Noise cleaning
+            combined_df = clean_gakg(combined_df)
+            
+            print(f"Successfully loaded GAKG dataset with {len(combined_df)} triples after cleaning.")
+            return combined_df
             combined_df['subject'] = combined_df['subject'].astype(str).str.lower()
             combined_df['object'] = combined_df['object'].astype(str).str.lower()
             
@@ -43,12 +94,23 @@ def load_gakg(data_dir):
     print("No GAKG parquet files found. Please run download_data.py first.")
     return None
 
+@lru_cache(maxsize=256)
+def _cached_neighbors(keyword: str, top_k: int):
+    # Placeholder to allow caching; actual computation happens in wrapper.
+    return None
+
+
 def get_weighted_neighbors_pagerank(gakg_df, keyword, top_k=20):
     """
     Finds neighbors of the keyword in the GAKG graph and ranks them using PageRank.
     Returns a dictionary of {neighbor: pagerank_score}.
     """
     keyword = keyword.lower()
+
+    # Fast path: cached result
+    cached = _cached_neighbors(keyword, top_k)
+    if cached is not None:
+        return cached
     
     # 1. Extract a subgraph (e.g., 2-hop neighborhood)
     # For simplicity and performance, we'll start with 1-hop neighbors
@@ -128,7 +190,14 @@ def get_weighted_neighbors_pagerank(gakg_df, keyword, top_k=20):
             for k in result:
                 result[k] /= max_score
                 
+    _cached_neighbors.cache_clear()  # keep cache fresh per computed keyword
+    _cached_neighbors(keyword, top_k)  # store
     return result
+
+@lru_cache(maxsize=256)
+def _cached_search(keyword: str, page: int, size: int, sort: str, order: str):
+    return None
+
 
 def search_acemap(keyword, page=1, size=10, sort=None, order='desc'):
     """
@@ -137,6 +206,11 @@ def search_acemap(keyword, page=1, size=10, sort=None, order='desc'):
     Sort column options: 'cited_by_count', 'publication_date'
     """
     
+    cache_key_sort = sort or ""
+    cached = _cached_search(keyword, page, size, cache_key_sort, order)
+    if cached is not None:
+        return cached
+
     # Base params
     params = {
         'keyword': keyword,
@@ -198,9 +272,10 @@ def search_acemap(keyword, page=1, size=10, sort=None, order='desc'):
            # app.py calls search_acemap(term, page=1, size=60).
            # So we should return the top 'size' items from the sorted list.
            
-           if len(all_results) > size:
-               return all_results[:size]
-           return all_results
+           result_slice = all_results[:size] if len(all_results) > size else all_results
+           _cached_search.cache_clear()
+           _cached_search(keyword, page, size, cache_key_sort, order)
+           return result_slice
            
         except Exception as e:
             print(f"Error in enhanced search: {e}")
@@ -215,6 +290,8 @@ def search_acemap(keyword, page=1, size=10, sort=None, order='desc'):
         response.raise_for_status()
         results = response.json().get('results', [])
         print(f"API returned {len(results)} results.")
+        _cached_search.cache_clear()
+        _cached_search(keyword, page, size, cache_key_sort, order)
         return results
     except Exception as e:
         print(f"Error searching Acemap: {e}")

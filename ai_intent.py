@@ -2,9 +2,8 @@ import json
 from typing import Dict, Optional, List
 
 from config import (
-    DEFAULT_INTENT_MODEL,
-    DEFAULT_RAG_MODEL,
     OPENAI_API_KEY,
+    MODEL_NAME,
     build_openai_client,
 )
 
@@ -12,8 +11,8 @@ from config import (
 class AIIntentParser:
     """LLM-based intent parser for research queries."""
 
-    def __init__(self, model: Optional[str] = None):
-        self.model = model or DEFAULT_INTENT_MODEL
+    def __init__(self):
+        self.model = MODEL_NAME
         self.api_key = OPENAI_API_KEY
         self.client = build_openai_client()
 
@@ -70,8 +69,8 @@ class AIIntentParser:
 class RAGResearchAssistant:
     """RAG assistant that summarizes search results plus KG expansions."""
 
-    def __init__(self, model: Optional[str] = None):
-        self.model = model or DEFAULT_RAG_MODEL
+    def __init__(self):
+        self.model = MODEL_NAME
         self.api_key = OPENAI_API_KEY
         self.client = build_openai_client()
 

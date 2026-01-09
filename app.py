@@ -330,12 +330,18 @@ def _map_sort_label(sort_token: Optional[str]) -> str:
 
 
 def _update_query_state(raw_query: str):
-    parsed = get_ai_intent().parse(raw_query)
-    st.session_state.search_keyword = parsed.get("keyword") or raw_query
-    sort_token = parsed.get("sort")
-    st.session_state.intent_sort_token = sort_token or "relevance"
+    use_ai = st.session_state.get("use_ai", True)
+    if use_ai:
+        parsed = get_ai_intent().parse(raw_query)
+        st.session_state.search_keyword = parsed.get("keyword") or raw_query
+        sort_token = parsed.get("sort")
+        st.session_state.intent_sort_token = sort_token or "relevance"
+        st.session_state.intent_explanation = parsed.get("explanation", "")
+    else:
+        st.session_state.search_keyword = raw_query
+        st.session_state.intent_sort_token = "relevance"
+        st.session_state.intent_explanation = "AI disabled"
     st.session_state.query_raw = raw_query
-    st.session_state.intent_explanation = parsed.get("explanation", "")
     st.session_state.page = 1
     st.session_state.rag_answer = None
 
@@ -376,11 +382,13 @@ if "affiliation_filter" not in st.session_state:
     st.session_state.affiliation_filter = ""
 if "neighbor_threshold" not in st.session_state:
     st.session_state.neighbor_threshold = 0.0
+if "use_ai" not in st.session_state:
+    st.session_state.use_ai = True
 
 
 # Search bar (Enter submits via form)
 with st.form("search_form"):
-    col1, col2, col3 = st.columns([3, 1, 1], vertical_alignment="bottom")
+    col1, col2, col3, col4 = st.columns([3, 1, 1, 1], vertical_alignment="bottom")
     with col1:
         st.text_input(
             "Search keyword",
@@ -395,6 +403,12 @@ with st.form("search_form"):
             key="sort_option",
         )
     with col3:
+        st.checkbox(
+            "AI Search",
+            key="use_ai",
+            help="Off: use raw query without LLM parsing/assistant",
+        )
+    with col4:
         search_button = st.form_submit_button("Search", use_container_width=True)
 
     col4, col5, col6 = st.columns([1, 1, 1])
@@ -430,7 +444,10 @@ st.markdown(
 if search_button:
     raw_query = (st.session_state.query_input or "").strip()
     if raw_query:
-        with st.spinner("Understanding query with LLM..."):
+        if st.session_state.get("use_ai", True):
+            with st.spinner("Understanding query with LLM..."):
+                _update_query_state(raw_query)
+        else:
             _update_query_state(raw_query)
     else:
         st.session_state.query_raw = ""
@@ -471,7 +488,8 @@ if core_keyword:
             else:
                 st.markdown(f"- Reasoning: {exp}")
 
-        rag_disabled = not (relevant or others)
+        use_ai = st.session_state.get("use_ai", True)
+        rag_disabled = (not use_ai) or not (relevant or others)
         if st.button("Generate search tips & summary", key="rag_generate", disabled=rag_disabled):
             with st.spinner("AI assistant is generating..."):
                 st.session_state.rag_answer = get_rag_assistant().answer(
@@ -482,7 +500,9 @@ if core_keyword:
                     others=others,
                     language=query_raw.strip()[:1] if query_raw else None,
                 )
-        if rag_disabled:
+        if not use_ai:
+            st.caption("AI assistant disabled (toggle off).")
+        elif rag_disabled:
             st.caption("Search results are needed before generating an answer.")
         if st.session_state.rag_answer:
             st.markdown(st.session_state.rag_answer)

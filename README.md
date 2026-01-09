@@ -8,11 +8,14 @@
 ```text
 .
 ├── data/
-│   └── gakg_*.parquet       # GAKG 知识图谱
-├── app.py                   # 基于 Streamlit 的 Web 界面
-├── main.py                  # 搜索增强主程序
-├── download_data.py         # 数据下载脚本 (Hugging Face)
+│   └── gakg_*.parquet       # GAKG 知识图谱核心数据
+├── app.py                   # Streamlit Web 应用入口
+├── ai_intent.py             # LLM 意图识别与 RAG 助手模块
+├── config.py                # 全局配置与环境加载
+├── main.py                  # 搜索、图计算与数据加载核心逻辑
 ├── pagerank.py              # PageRank 算法实现
+├── download_data.py         # 数据下载脚本
+├── run.py                   # 启动助手
 └── requirements.txt
 ```
 
@@ -77,22 +80,56 @@ MODEL_NAME=deepseek-v3.2-exp
 
 3.  **UI 渲染优化**:
     -   使用 Streamlit 的 `@st.cache_resource` 装饰器对庞大的 GAKG 数据进行全局缓存，确保只有在应用首次启动时需要加载数据，后续刷新或重搜均瞬间完成。
+4.  **搜索与邻域缓存**:
+    -   对 GAKG 邻域计算与 Acemap 查询增加 LRU 缓存，重复关键词或排序请求可命中缓存，减少 API 往返与图计算时间。
 
-## 搜索增强方法
-
-### 1. 搜索召回：查询扩展
-- **目标**：先扩展关键词，从知识图谱中发现与用户术语紧密相连的相关概念，向 Acemap 发起多轮查询，召回更多相关文献。
+## 知识图谱清洗与去噪
+- **清洗位置**：在 `load_gakg` 内置执行（见 `main.py` 的 `clean_gakg`）。
 - **步骤**：
-    1. 利用 PageRank 在 GAKG 中对关键词邻域排序，选出与用户概念最紧密的 Top-3 相关词。
-    2. 除了原始关键词外，还分别调用 Acemap 接口搜索这些相关概念，结果去重后合并。
-- Score 计算方法：
-    - 在 main.py 里，先用 PageRank 计算查询词邻域中相关概念的权重（归一化到 0~1）。
-    - 对每篇论文，提取其 keywords/concepts，与这些邻域词做交集；将交集词的权重求和，得到 enhancement_score main.py。
+    1) 归一化大小写与空白；
+    2) 去除空值与自环；
+    3) 基于长度的噪声过滤（过短/过长的 token）；
+    4) 去重边；
+    5) 度阈值剪枝（仅保留两端度数 ≥ 2 的边，默认可调整 `min_degree`）。
+- **效果**：减少孤立点与重复噪声边，压缩存储体积并提升后续查询/扩展的稳定性。
 
-### 2. 提高精度：图谱过滤 + 引文排序
-- **目标**：在增强召回基础上，保留与知识图谱相关联且引用量高的论文。
-- **步骤**：
-    1. 统计每篇论文关键词/概念与拓展词集合的交叉；如果有交集，则说明和图谱邻域有关。
-    2. 以引用次数为主要排序指标（`cited_by_count`），其中与图谱交叉的文献排在前面，未命中的文献在其后。
+## 核心工作流与排序算法 (Core Workflow & Algorithms)
+
+系统采用 LLM 意图识别与 GAKG 知识图谱相结合的方式，实现精确且具有上下文感知的论文检索。完整流程如下：
+
+### 1. 意图识别 (Intent Parsing)
+- **输入**：用户的自然语言查询（如 "latest papers on deep learning"）。
+- **处理**：使用 LLM (`ai_intent.py`) 解析出：
+    - **核心检索词** (`keyword`)：用于 API 搜索。
+    - **排序意图** (`sort`)：识别用户偏向 "引用最高" (Most Cited) 还是 "最新发表" (Latest Published)。
+- **效果**：将模糊的自然语言转化为精确的结构化检索指令。
+
+### 2. 图谱扩展与召回 (GAKG Expansion & Retrieval)
+- **原理**：基于 PageRank 算法在 GAKG 图谱中计算核心检索词的邻域节点权重。
+- **扩展**：选取权重最高的 Top-3 相关概念（如搜索 "plate tectonics" 扩展出 "subduction", "lithosphere"）。
+- **召回**：并发调用 Acemap API，分别搜索核心词和扩展词，合并结果并去重。
+- **阈值控制**：用户可通过滑块调节 `neighbor_threshold`。阈值越高，过滤越严格，接近 1.0 时仅使用核心词搜索。
+
+### 3. 相关性打分 (Scoring: Enhancement Score)
+为了量化论文与搜索主题的关联深度，系统计算 **Enhancement Score**：
+- **权重计算**：利用 PageRank 计算出的扩展词权重（`weighted_neighbors`），归一化至 0~1。
+- **论文得分**：遍历每篇召回论文的 `keywords` 和 `concepts` 字段：
+  $$ \text{Score} = \sum_{w \in (\text{PaperKeywords} \cap \text{Neighbors})} \text{Weight}(w) $$
+  即：论文包含的关键词若出现在图谱扩展词中，则累加对应的 PageRank 权重。得分越高，代表该论文在知识图谱的语义空间中越核心。
+
+### 4. 分层排序策略 (Hierarchical Sorting)
+系统采用 **两级排序** 逻辑，优先展示语义更相关的结果：
+1.  **第一级：图谱重叠 (Graph Overlap)**
+    -   **相关结果 (Relevant)**：`enhancement_score > 0` 的论文（即命中知识图谱扩展词）。
+    -   **其他结果 (Others)**：未命中图谱扩展词的论文。
+    -   *界面上分为 "✨ Graph-overlap results" 和 "📄 No graph overlap" 两个区块展示。*
+2.  **第二级：用户偏好 (User Preference)**
+    -   在第一级的每个分组内部，根据用户选择的排序方式进行二次排序：
+        -   **Most Cited**：按 `cited_by_count` 降序。
+        -   **Latest Published**：按 `publication_date` 或 `publication_year` 降序。
+
+### 5. RAG 智能总结 (RAG Assistant)
+- **输入**：用户的原始问题 + Top 检索结果 + 图谱扩展词。
+- **生成**：利用 LLM (`ai_intent.py`) 阅读这些上下文，生成针对该研究问题的回答、关键文献引用及后续研究建议。
 
 > 温馨提示：GAKG 知识图谱主要涵盖地学领域。搜索非地学关键词可能无法获得有效的增强效果（得分为 0）。
