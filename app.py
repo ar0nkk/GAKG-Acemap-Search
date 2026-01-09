@@ -8,9 +8,9 @@ from main import (
     get_weighted_neighbors_pagerank,
     search_acemap,
     enhance_search_results,
-    GAKG_PATH,
+    DATA_DIR,
 )
-from ai_intent import AIIntentParser, RAGResearchAssistant
+from agent import AIIntentParser, RAGResearchAssistant
 
 # Page configuration
 st.set_page_config(
@@ -23,7 +23,7 @@ st.set_page_config(
 
 @st.cache_resource
 def get_gakg_data():
-    return load_gakg(GAKG_PATH)
+    return load_gakg(DATA_DIR)
 
 
 @st.cache_resource
