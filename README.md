@@ -76,11 +76,11 @@ pip install -r requirements.txt
 
 #### 2. 全局度数惩罚机制 (Global Degree Penalty)
 为了解决 PageRank 发散到通用词（Super Nodes）的问题，我们引入了后处理惩罚项。
-- **问题**: 词语如 "Model", "System", "Area" 在图谱中度数极高，容易吸走 PageRank 权重。
-- **解法**: 引入 **Inverse Node Frequency (INF)** 思想：
+- 问题: 词语如 "Model", "System", "Area" 在图谱中度数极高，容易吸走 PageRank 权重。
+- 解法: 引入 **Inverse Node Frequency (INF)** 思想：
 
   $$S_{final}(v) = S_{PageRank}(v) \times \log \left( \frac{N_{total}}{Degree_{global}(v) + \epsilon} \right)$$
-  
+
 - **效果**: 如果一个词在全图中连接了太多其他词（说明它是通用词），它的最终得分会被大幅削减。
 ---
 
