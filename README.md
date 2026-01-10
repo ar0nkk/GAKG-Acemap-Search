@@ -70,18 +70,14 @@ pip install -r requirements.txt
 传统的搜索扩展往往引入噪音。本项目采用改进的 Context-Aware PageRank 策略来确保扩展词的精准度：
 
 #### 1. 局部子图个性化 (Subgraph Personalization)
-不同于全局 PageRank，我们只在查询词的 **2-hop 邻域** 内构建稀疏子图。
-- 这相当于将 "Personalization Vector" 的概率质量集中在查询词及其邻居上。
-- 确保了计算出的权重完全服务于当前的局部语境，而非全局重要性。
+不同于全局 PageRank，我们只在查询词的 **2-hop 邻域** 内构建稀疏子图。这相当于将 "Personalization Vector" 的概率质量集中在查询词及其邻居上，确保了计算出的权重完全服务于当前的局部语境，而非全局重要性。
 
 #### 2. 全局度数惩罚机制 (Global Degree Penalty)
-为了解决 PageRank 发散到通用词（Super Nodes）的问题，我们引入了后处理惩罚项。
-- 问题: 词语如 "Model", "System", "Area" 在图谱中度数极高，容易吸走 PageRank 权重。
-- 解法: 引入 **Inverse Node Frequency (INF)** 思想：
+"Model", "System", "Area" 等无价值节点在图谱中度数极高，容易吸走 PageRank 权重。为了解决 PageRank 发散到通用词（Super Nodes）的问题，我们引入了 INF 思想：
 
   $$S_{final}(v) = S_{PageRank}(v) \times \log \left( \frac{N_{total}}{Degree_{global}(v) + \epsilon} \right)$$
 
-- **效果**: 如果一个词在全图中连接了太多其他词（说明它是通用词），它的最终得分会被大幅削减。
+如果一个词在全图中连接了太多其他词（说明它是通用词），它的最终得分会被大幅削减。
 ---
 
 > 温馨提示：GAKG 知识图谱主要涵盖地学领域。搜索非地学关键词可能无法获得有效的增强效果（得分为 0）。
