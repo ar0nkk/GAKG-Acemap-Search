@@ -14,20 +14,21 @@ HEADERS = {
 }
 
 def load_gakg(data_dir):
-    """Loads the GAKG dataset."""
-    file_path = os.path.join(data_dir, "gakg.parquet")
+    """Loads the GAKG dataset. Expects a pre-cleaned file for performance."""
+    cleaned_path = os.path.join(data_dir, "gakg_cleaned.parquet")
     
-    if os.path.exists(file_path):
-        print(f"Loading GAKG data from {file_path}...")
+    # 1. Load pre-cleaned binary
+    if os.path.exists(cleaned_path):
+        print(f"Loading cached GAKG data from {cleaned_path}...")
         try:
-            df = pd.read_parquet(file_path)
-            print(f"Load complete. Loaded {len(df)} triples.")
+            df = pd.read_parquet(cleaned_path)
+            print(f"Fast load complete. Loaded {len(df)} triples.")
             return df
         except Exception as e:
-            print(f"Failed to load file: {e}.")
+            print(f"Failed to load cached file: {e}.")
     else:
-        print(f"Error: {file_path} not found.")
-        print("Please run 'python download_data.py' to download the dataset.")
+        print(f"Error: {cleaned_path} not found.")
+        print("Please run 'python preprocess_data.py' to generate the cleaned dataset first.")
     
     return None
 
