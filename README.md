@@ -7,13 +7,13 @@
 
 ```text
 .
-├── agent.py                 # LLM 意图识别与 RAG 助手模块
+├── agent.py                 # AI 智能体
 ├── app.py                   # Streamlit Web 应用入口
-├── config.py                # 全局配置与环境加载
-├── main.py                  # 搜索、图计算与数据加载核心逻辑
+├── config.py                # 配置文件
+├── main.py                  # 主程序
 ├── pagerank.py              # PageRank 算法实现
 ├── download_data.py         # 数据下载脚本
-├── run.py                   # 启动助手
+├── run.py                   # 启动脚本
 └── requirements.txt
 ```
 
@@ -33,18 +33,18 @@ pip install -r requirements.txt
 详见 `config.py`
 
 ### 启动！
-- 运行 `run.py` 即可
+运行 `run.py` 即可
 
 ---
 
 ## Workflow
 
-1. **User Inquiry**: 用户输入自然语言查询（如 *"Help me find papers about plate tectonics"*）。
+1. **User Inquiry**: 用户输入自然语言查询（如 *"板块构造理论最新研究"*）。
 2. **Intent Analysis (Agent)**: LLM 分析用户意图，提取核心关键词 (`plate tectonics`) 并判断排序偏好。
-3. **Knowledge Graph Expansion**: 在 GAKG 中定位关键词节点，通过 **Personalized PageRank** 算法计算相邻节点的权重，挖掘出高关联的扩展概念（如 `sedimentation`, `crust`, `subduction`）。
+3. **Knowledge Graph Expansion**: 在 GAKG 中定位关键词节点，通过 **Personalized PageRank** 算法计算相邻节点的权重，挖掘出高关联的扩展概念（如 `sediment`, `earth`）。
 4. **Parallel Retrieval**: 并行向 Acemap API 发起查询（核心词 + 扩展词），获取广泛的候选论文集。
 5. **Re-ranking & Scoring**: 计算每篇论文与扩展概念集的**重叠度得分 (Overlap Score)**，结合引用数和发表年份进行混合排序。
-6. **AI Synthesis (RAG)**: 最后由 LLM 阅读高分论文元数据，生成结构化的研究综述和下一步指引。
+6. **AI Synthesis (RAG)**: 最后由 LLM 阅读高分论文元数据，生成结构化的研究综述和搜索建议。
 
 ## Score Calculation
 
