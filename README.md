@@ -76,6 +76,7 @@ pip install -r requirements.txt
 "Model", "System", "Area" 等无价值节点在图谱中度数极高，容易吸走 PageRank 权重。为了解决 PageRank 发散到通用词（Super Nodes）的问题，我们引入了 INF 思想：
 
   $$S_{final}(v) = S_{PageRank}(v) \times \log \left( \frac{N_{total}}{Degree_{global}(v) + \epsilon} \right)$$
+
 如果一个词在全图中连接了太多其他词（说明它是通用词），它的最终得分会被大幅削减。
 
 ---
