@@ -53,12 +53,12 @@ pip install -r requirements.txt
 4. Hybrid Search: 并行向 API 发起查询，同时获取核心词和高权重扩展词（如 `subduction`）的论文。
 5. Re-ranking & Scoring: 
    - KG Overlap Score 计算:
-     $$ S_{GAKG} = \sum_{w \in K_{paper} \cap V_{subgraph}} S_{PPR}(w) $$
+     $$S_{GAKG} = \sum_{w \in K_{paper} \cap V_{subgraph}} S_{PPR}(w)$$
 
      即：若论文的关键词 $w$ 出现在查询词的扩展子图节点集 $V_{subgraph}$ 中，则累加该词的 PageRank 权重。
 
    - 综合排序评分公式: 
-     $$ Score_{Final} = S_{GAKG} + \alpha \times \log(\text{Citations} + 1) $$
+     $$Score_{Final} = S_{GAKG} + \alpha \times \log(\text{Citations} + 1)$$
 
      其中 $\alpha$ 为影响力平衡系数（默认为 0.2，可在 `config.py` 中调整）。
 6. AI Synthesis (RAG): LLM 阅读高分论文的元数据，生成带引用的综述回答。
@@ -76,7 +76,7 @@ pip install -r requirements.txt
 为了解决 PageRank 发散到通用词（Super Nodes）的问题，我们引入了后处理惩罚项。
 - **问题**: 词语如 "Model", "System", "Area" 在图谱中度数极高，容易吸走 PageRank 权重。
 - **解法**: 引入 **Inverse Node Frequency (INF)** 思想：
-  $$ S_{final}(v) = S_{PageRank}(v) \times \log \left( \frac{N_{total}}{Degree_{global}(v) + \epsilon} \right) $$
+  $$S_{final}(v) = S_{PageRank}(v) \times \log \left( \frac{N_{total}}{Degree_{global}(v) + \epsilon} \right)$$
 - **效果**: 如果一个词在全图中连接了太多其他词（说明它是通用词），它的最终得分会被大幅削减。
 ---
 
