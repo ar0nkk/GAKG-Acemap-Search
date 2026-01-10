@@ -1,6 +1,7 @@
 import streamlit as st
 import concurrent.futures
 import ast
+import math
 from typing import List, Dict, Tuple, Optional
 
 from main import (
@@ -10,6 +11,7 @@ from main import (
     enhance_search_results,
     DATA_DIR,
 )
+from config import CITATION_WEIGHT_ALPHA
 from agent import AIIntentParser, RAGResearchAssistant
 
 # Page configuration
@@ -418,6 +420,7 @@ def run_enhanced_pipeline(
         api_sort = "cited_by_count"
     elif sort_option == "Latest Published":
         api_sort = "publication_date"
+    # For "Most Relevant" and "Default", we use default API relevance (None)
 
     # 1) Neighborhood + expansion terms from GAKG (keyword already parsed by LLM)
     core_keyword = keyword
@@ -482,6 +485,17 @@ def run_enhanced_pipeline(
     def get_secondary_sort(p):
         if sort_option == "Latest Published":
             return _date_key(p)
+        elif sort_option == "Most Relevant":
+            # Sort by GAKG score first, then citations
+            return (p.get("enhancement_score", 0), p.get("cited_by_count", 0) or 0)
+        elif sort_option == "Default":
+            # Integrated Score: GAKG Score + alpha * log(Citations)
+            # This balances topical relevance with paper impact
+            score = p.get("enhancement_score", 0)
+            cited = p.get("cited_by_count", 0) or 0
+            return score + CITATION_WEIGHT_ALPHA * math.log(cited + 1)
+        
+        # Default fallback (Most Cited)
         return p.get("cited_by_count", 0) or 0
 
     # Enrich with author/affiliation metadata
@@ -567,7 +581,7 @@ st.markdown("## 🔍 GAKG-based Acemap Search Enhancement", unsafe_allow_html=Tr
 if "page" not in st.session_state:
     st.session_state.page = 1
 if "sort_option" not in st.session_state:
-    st.session_state.sort_option = "Most Cited"
+    st.session_state.sort_option = "Default"
 if "query_input" not in st.session_state:
     st.session_state.query_input = ""
 if "query_raw" not in st.session_state:
@@ -603,7 +617,7 @@ with st.form("search_form"):
     with col2:
         st.selectbox(
             "Sort",
-            ("Most Cited", "Latest Published"),
+            ("Default", "Most Relevant", "Most Cited", "Latest Published"),
             key="sort_option",
         )
     with col3:

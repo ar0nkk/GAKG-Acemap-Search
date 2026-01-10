@@ -5,92 +5,31 @@ from pagerank import PageRank
 import os
 import glob
 from functools import lru_cache
-
-from config import CLEAN_MIN_DEGREE, CLEAN_MAX_TOKEN_LEN, DATA_DIR
+from config import DATA_DIR
 
 # Configuration
 ACEMAP_API_URL = 'https://acemap.info/api/v1/work/search'
-
-def clean_gakg(gakg_df, min_degree: int = CLEAN_MIN_DEGREE, max_token_len: int = CLEAN_MAX_TOKEN_LEN):
-    """Clean GAKG edges to reduce noise.
-
-    Steps:
-    1) Normalize to lowercase/stripped strings.
-    2) Drop empty tokens and self-loops.
-    3) Remove obviously noisy tokens by length (too short/long).
-    4) Deduplicate edges.
-    5) Prune low-degree nodes (keep edges where both endpoints have degree >= min_degree).
-    """
-
-    if gakg_df is None or len(gakg_df) == 0:
-        return gakg_df
-
-    df = gakg_df.copy()
-    df['subject'] = df['subject'].astype(str).str.strip().str.lower()
-    df['object'] = df['object'].astype(str).str.strip().str.lower()
-
-    before_edges = len(df)
-
-    # Drop empty and self-loops
-    df = df[(df['subject'] != '') & (df['object'] != '')]
-    df = df[df['subject'] != df['object']]
-
-    # Length-based noise filter
-    df = df[(df['subject'].str.len() >= 2) & (df['object'].str.len() >= 2)]
-    df = df[(df['subject'].str.len() <= max_token_len) & (df['object'].str.len() <= max_token_len)]
-
-    # Deduplicate edges
-    df = df.drop_duplicates(subset=['subject', 'object'])
-
-    # Degree-based pruning
-    degree = df['subject'].value_counts()
-    degree = degree.add(df['object'].value_counts(), fill_value=0)
-    keep_mask = (df['subject'].map(degree) >= min_degree) & (df['object'].map(degree) >= min_degree)
-    df = df[keep_mask].reset_index(drop=True)
-
-    after_edges = len(df)
-    print(f"Cleaned GAKG: edges {before_edges} -> {after_edges} (min_degree={min_degree}, max_len={max_token_len})")
-
-    return df
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 }
 
 def load_gakg(data_dir):
-    """Loads the GAKG dataset from the data directory."""
-    print(f"Looking for GAKG data in {data_dir}...")
+    """Loads the GAKG dataset. Expects a pre-cleaned file for performance."""
+    cleaned_path = os.path.join(data_dir, "gakg_cleaned.parquet")
     
-    # Try to find full chunks
-    full_chunks = sorted(glob.glob(os.path.join(data_dir, "gakg_full_chunk_*.parquet")))
+    # 1. Load pre-cleaned binary
+    if os.path.exists(cleaned_path):
+        print(f"Loading cached GAKG data from {cleaned_path}...")
+        try:
+            df = pd.read_parquet(cleaned_path)
+            print(f"Fast load complete. Loaded {len(df)} triples.")
+            return df
+        except Exception as e:
+            print(f"Failed to load cached file: {e}.")
+    else:
+        print(f"Error: {cleaned_path} not found.")
+        print("Please run 'python preprocess_data.py' to generate the cleaned dataset first.")
     
-    if full_chunks:
-        print(f"Found {len(full_chunks)} dataset chunks. Loading...")
-        dfs = []
-        for chunk_path in full_chunks:
-            try:
-                print(f"  Loading {os.path.basename(chunk_path)}...")
-                # Optimization: Only load necessary columns to save memory and time
-                dfs.append(pd.read_parquet(chunk_path, columns=['subject', 'object']))
-            except Exception as e:
-                print(f"  Error loading {chunk_path}: {e}")
-        
-        if dfs:
-            combined_df = pd.concat(dfs, ignore_index=True)
-            print("Optimizing GAKG dataframe...")
-            # Optimization: Pre-lowercase strings to speed up search queries significantly
-
-            # Noise cleaning
-            combined_df = clean_gakg(combined_df)
-            
-            print(f"Successfully loaded GAKG dataset with {len(combined_df)} triples after cleaning.")
-            return combined_df
-            combined_df['subject'] = combined_df['subject'].astype(str).str.lower()
-            combined_df['object'] = combined_df['object'].astype(str).str.lower()
-            
-            print(f"Successfully loaded GAKG dataset with {len(combined_df)} triples.")
-            return combined_df
-    
-    print("No GAKG parquet files found. Please run download_data.py first.")
     return None
 
 @lru_cache(maxsize=256)
@@ -151,6 +90,15 @@ def get_weighted_neighbors_pagerank(gakg_df, keyword, top_k=20):
         # Fallback: if no internal edges, just return uniform weights
         return {n: 1.0 for n in neighbors}
 
+    # Calculate global degrees for penalty calculation
+    # We query the degree in the *entire* graph (or close to it) to identify generic terms like "area".
+    relevant_rows = gakg_df[gakg_df['subject'].isin(neighbors) | gakg_df['object'].isin(neighbors)]
+    sub_counts = relevant_rows['subject'].value_counts()
+    obj_counts = relevant_rows['object'].value_counts()
+    global_degrees = sub_counts.add(obj_counts, fill_value=0)
+    
+    total_nodes_est = len(gakg_df) # Use edge count as proxy for N (approx order of magnitude)
+
     # 2. Build Adjacency Matrix
     # Map nodes to indices
     nodes = sorted(list(neighbors))
@@ -165,22 +113,32 @@ def get_weighted_neighbors_pagerank(gakg_df, keyword, top_k=20):
         if u in node_to_idx and v in node_to_idx:
             idx_u = node_to_idx[u]
             idx_v = node_to_idx[v]
-            adj_matrix[idx_u, idx_v] = 1 # Unweighted or use count if multiple
-            # If undirected, set both? GAKG is directed (subject -> object).
-            # PageRank works on directed graphs.
+            adj_matrix[idx_u, idx_v] = 1 # Unweighted
 
     # 3. Run PageRank
     pr_solver = PageRank()
-    # Handle dangling nodes (nodes with no outgoing edges) inside PageRank implementation
-    # or ensure the matrix is stochastic. The provided PageRank implementation likely handles it
-    # or expects us to. Let's check the implementation.
-    # The provided implementation has _build_stochastic_matrix which handles 0 out-degree?
-    # It sets column to 0. Standard PageRank handles dead ends by teleportation.
-    
     pr_scores = pr_solver.page_rank(adj_matrix)
     
-    # 4. Return dictionary
-    result = {nodes[i]: pr_scores[i] for i in range(n_nodes)}
+    # 4. Return dictionary with Degree Penalty
+    # Formula: S_new(v) = S_ppr(v) * log(Total_Nodes / Degree(v))
+    result = {}
+    for i in range(n_nodes):
+        node = nodes[i]
+        score = pr_scores[i]
+        
+        deg = global_degrees.get(node, 1)
+        # Avoid division by zero and negative logs
+        if deg < 1: deg = 1
+        
+        # IDF-like weighting
+        # We use log(N / deg). If deg is huge (e.g. "system"), this term becomes small.
+        # Add epsilon to denominator just in case.
+        # Ensure result is non-negative.
+        penalty_factor = np.log(total_nodes_est / deg)
+        if penalty_factor < 0.1: 
+            penalty_factor = 0.1 # Floor to avoid zeroing out completely
+            
+        result[node] = score * penalty_factor
     
     # Normalize scores so the max is 1 (optional, for easier scoring interpretation)
     if result:

@@ -10,14 +10,16 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") #
 OPENAI_API_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 MODEL_NAME = "deepseek-v3.2"
 
-# AI 开关（若为 false，则不调用 LLM，直接使用原始查询）
-USE_AI = os.getenv("USE_AI", "true").lower() == "true"
-
-# 数据/清洗参数
+# 数据路径
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(SCRIPT_DIR, "data")
+
+# 清洗参数
 CLEAN_MIN_DEGREE = 2
 CLEAN_MAX_TOKEN_LEN = 120
+
+# 排序参数
+CITATION_WEIGHT_ALPHA = 0.2
 
 def build_openai_client() -> Optional[OpenAI]:
     if not OPENAI_API_KEY:
