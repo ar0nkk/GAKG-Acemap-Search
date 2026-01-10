@@ -63,7 +63,7 @@ pip install -r requirements.txt
      $$Score_{Final} = S_{GAKG} + \alpha \times \log(\text{Citations} + 1)$$
 
      其中 $\alpha$ 为影响力平衡系数（默认为 0.2，可在 `config.py` 中调整）。
-6. AI Synthesis (RAG): LLM 阅读高分论文的元数据，生成带引用的综述回答。
+6. Agent Synthesis (RAG): LLM 阅读高分论文的元数据，生成带引用的综述回答。
 
 ### Context-Aware PageRank 算法细节
 
