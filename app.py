@@ -623,7 +623,21 @@ def run_enhanced_pipeline(
     page_relevant = [p for p in page_items if p["has_graph_overlap"]]
     page_others = [p for p in page_items if not p["has_graph_overlap"]]
 
-    return page_relevant, page_others, expansion_terms
+    # Recalculate expansion terms based on actual overlaps found in the results
+    actual_expansion_terms = set()
+    for p in enhanced_sorted:
+        if 'overlapping_keywords' in p:
+            actual_expansion_terms.update(p['overlapping_keywords'])
+    
+    new_expansion_terms = []
+    for term in actual_expansion_terms:
+         if term.lower() != core_keyword.lower():
+             new_expansion_terms.append(term)
+    
+    # Sort by original graph weight
+    new_expansion_terms.sort(key=lambda t: weighted_neighbors.get(t, 0), reverse=True)
+
+    return page_relevant, page_others, new_expansion_terms
 
 
 def _map_sort_label(sort_token: Optional[str]) -> str:

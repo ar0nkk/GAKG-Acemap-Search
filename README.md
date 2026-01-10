@@ -28,7 +28,7 @@ pip install -r requirements.txt
 ```
 
 ### 下载知识图谱
-请运行 `download_data.py` 脚本从 Hugging Face 下载已清洗数据的 Parquet 文件（约 55 MB）。
+请运行 `download_data.py` 脚本从 Hugging Face 下载已清洗数据的 Parquet 文件（约 47 MB）。
 
 > 注：脚本会自动检测环境变量并使用您系统当前的代理配置
 
@@ -44,27 +44,28 @@ pip install -r requirements.txt
 
 ## 🚀 Workflow
 
-1. **User Inquiry (用户查询)**: 用户输入自然语言查询（如 *"板块构造理论最新研究"*）。
-2. **Intent Analysis (AI 意图识别)**: 
-   - LLM 分析用户意图，提取核心学术关键词（如 `plate tectonics`）。
-   - 自动推断用户的排序偏好（是找最新文章，还是找最经典文章）。
-3. **Knowledge Graph Expansion (知识图谱扩展)**: 
-   - **子图构建**: 在 GAKG 中定位核心词，并向外扩展 1-2 跳，构建局部语境子图。
-   - **算法计算**: 运行 **Local PageRank** 算法计算子图中各节点的结构权重。
-   - **噪声抑制**: 应用 **Global Degree Penalty** 惩罚高频通用词（如 "analysis", "study"）。
-4. **Hybrid Search (混合检索)**: 并行向 API 发起查询，同时获取核心词和高权重扩展词（如 `subduction`）的论文。
-5. **Re-ranking & Scoring (重排序)**: 
-   - **KG Overlap Score (知识图谱重叠分) 计算**:
+1. 用户输入自然语言查询（如 *"板块运动理论最新研究"*）。
+2. LLM 分析用户搜索意图，提取核心关键词（如 `plate tectonics`）
+3. KG Expansion: 
+   - 在 GAKG 中定位核心词，并向外扩展 1-2 跳，构建局部语境子图。
+   - 采用 Context-Aware PPR 算法计算子图中各节点的结构权重。
+   - 应用 Global Degree Penalty 惩罚高频通用词（如 "analysis", "study"），降低这类过于宽泛的概念的分数。
+4. Hybrid Search: 并行向 API 发起查询，同时获取核心词和高权重扩展词（如 `subduction`）的论文。
+5. Re-ranking & Scoring: 
+   - KG Overlap Score 计算:
      $$ S_{GAKG} = \sum_{w \in K_{paper} \cap V_{subgraph}} S_{PPR}(w) $$
+
      即：若论文的关键词 $w$ 出现在查询词的扩展子图节点集 $V_{subgraph}$ 中，则累加该词的 PageRank 权重。
-   - **综合评分公式**: 
+
+   - 综合排序评分公式: 
      $$ Score_{Final} = S_{GAKG} + \alpha \times \log(\text{Citations} + 1) $$
+
      其中 $\alpha$ 为影响力平衡系数（默认为 0.2，可在 `config.py` 中调整）。
-6. **AI Synthesis (RAG)**: LLM 阅读高分论文的元数据，生成带引用的综述回答。
+6. AI Synthesis (RAG): LLM 阅读高分论文的元数据，生成带引用的综述回答。
 
 ### Context-Aware PageRank 算法细节
 
-传统的搜索扩展往往引入噪音。本项目采用改进的 **Context-Aware PageRank** 策略来确保扩展词的精准度：
+传统的搜索扩展往往引入噪音。本项目采用改进的 Context-Aware PageRank 策略来确保扩展词的精准度：
 
 #### 1. 局部子图个性化 (Subgraph Personalization)
 不同于全局 PageRank，我们只在查询词的 **2-hop 邻域** 内构建稀疏子图。
