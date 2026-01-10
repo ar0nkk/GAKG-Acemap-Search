@@ -7,8 +7,6 @@
 
 ```text
 .
-├── data/
-│   └── gakg_*.parquet       # GAKG 知识图谱核心数据
 ├── agent.py                 # LLM 意图识别与 RAG 助手模块
 ├── app.py                   # Streamlit Web 应用入口
 ├── config.py                # 全局配置与环境加载
