@@ -431,6 +431,71 @@ def run_enhanced_pipeline(
         for term, score in sorted(weighted_neighbors.items(), key=lambda x: x[1], reverse=True)
         if score >= neighbor_threshold
     ]
+def _check_relevance(paper: Dict, keyword: str) -> bool:
+    """Check if the paper content is relevant to the keyword (Title/Abstract/Keywords)."""
+    kw_lower = keyword.lower()
+    
+    # 1. Title
+    if kw_lower in (paper.get("title") or "").lower():
+        return True
+        
+    # 2. Keywords
+    p_kws = []
+    raw_kws = paper.get("keywords") or []
+    if raw_kws:
+        if isinstance(raw_kws[0], dict):
+            p_kws = [k.get('display_name', '').lower() for k in raw_kws]
+        else:
+            p_kws = [str(k).lower() for k in raw_kws]
+    if any(kw_lower in k for k in p_kws):
+        return True
+        
+    # 3. Abstract (Handle Inverted Index if possible, simpler to check raw text match if available)
+    # Acemap abstract is often an inverted index. Reconstructing it is expensive.
+    # We check if the keys contain the words of the keyword.
+    ab = paper.get("abstract")
+    if isinstance(ab, str):
+        if kw_lower in ab.lower():
+            return True
+    elif isinstance(ab, dict) and "inverted_index" in ab:
+        # Check if all tokens of the keyword appear in the index keys
+        # Simple heuristic: exact match of the phrase is hard in inverted index without position.
+        # So we check if *all* words in the keyword are present as keys.
+        tokens = kw_lower.split()
+        index_keys = set(k.lower() for k in ab["inverted_index"].keys())
+        if all(t in index_keys for t in tokens):
+            return True
+
+    return False
+
+def run_enhanced_pipeline(
+    keyword: str,
+    page: int,
+    sort_option: str,
+    author_filter: str = "",
+    affiliation_filter: str = "",
+    neighbor_threshold: float = 0.0,
+) -> Tuple[List[Dict], List[Dict], List[str]]:
+    """Run the enhanced search pipeline with sorting. Keyword is already LLM-parsed."""
+    if GAKG_DF is None:
+        return [], [], []
+
+    api_sort = None
+    if sort_option == "Most Cited":
+        api_sort = "cited_by_count"
+    elif sort_option == "Latest Published":
+        api_sort = "publication_date"
+    # For "Most Relevant" and "Relevance & Impact", we use default API relevance (None)
+
+    # 1) Neighborhood + expansion terms from GAKG (keyword already parsed by LLM)
+    core_keyword = keyword
+    weighted_neighbors = get_weighted_neighbors_pagerank(GAKG_DF, core_keyword)
+    # Apply threshold to expansion candidates
+    sorted_neighbors = [
+        (term, score)
+        for term, score in sorted(weighted_neighbors.items(), key=lambda x: x[1], reverse=True)
+        if score >= neighbor_threshold
+    ]
     # If the threshold is maxed (~1), skip expansion terms
     if neighbor_threshold >= 0.999:
         sorted_neighbors = []
@@ -453,19 +518,41 @@ def run_enhanced_pipeline(
         }
         for future in concurrent.futures.as_completed(future_to_term):
             try:
+                term = future_to_term[future]
                 api_results = future.result()
+                is_core = (term.lower() == core_keyword.lower())
+                
                 for p in api_results:
                     pid = p.get("id") or p.get("title")
-                    if pid and pid not in results_map:
+                    if not pid: continue
+                    
+                    if pid not in results_map:
+                        p['_found_by_core'] = is_core
                         results_map[pid] = p
+                    else:
+                        if is_core:
+                            results_map[pid]['_found_by_core'] = True
+                            
             except Exception as exc:
                 term = future_to_term[future]
                 print(f"Search failed for term {term}: {exc}")
 
-    merged_results = list(results_map.values())
+    # Deduplication & Relevance Filtering
+    final_candidates = []
+    for p in results_map.values():
+        # Keep if found by core keyword
+        if p.get('_found_by_core', False):
+            final_candidates.append(p)
+            continue
+            
+        # If found ONLY by expansion, STRICTLY check relevance to core keyword
+        # "Discard if completely irrelevant to query word"
+        if _check_relevance(p, core_keyword):
+            final_candidates.append(p)
+        # else: discard
 
     # 3) Enrich with graph overlap
-    enhanced = enhance_search_results(merged_results, weighted_neighbors)
+    enhanced = enhance_search_results(final_candidates, weighted_neighbors)
 
     # 4) Global Sort (by user-selected criterion)
     def _date_key(p: Dict) -> int:
