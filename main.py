@@ -13,6 +13,10 @@ HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 }
 
+STOPWORDS = {
+    "which", "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "from", "for", "with", "by", "of", "as", "is", "are", "was", "were", "be", "been", "being", "it", "this", "that", "these", "those", "can", "could", "may", "might", "will", "would", "shall", "should", "must", "have", "has", "had", "do", "does", "did", "about", "above", "across", "after", "against", "along", "among", "around", "before", "behind", "below", "beneath", "beside", "between", "beyond", "during", "inside", "into", "near", "outside", "over", "through", "under", "underneath", "upon", "within", "without", "what", "where", "when", "why", "how", "who", "whom", "whose", "i", "you", "he", "she", "we", "they", "me", "him", "her", "us", "them", "my", "your", "his", "its", "our", "their", "yours", "hers", "ours", "theirs", "myself", "yourself", "himself", "herself", "itself", "ourselves", "themselves", "each", "other", "another", "such", "some", "any", "no", "not", "s", "t", "don", "ve", "ll", "re", "m", "d", "won", "doesn", "hasn", "haven", "isn", "aren", "wasn", "weren", "didn"
+}
+
 def load_gakg(data_dir):
     """Loads the GAKG dataset. Expects a pre-cleaned file for performance."""
     cleaned_path = os.path.join(data_dir, "gakg_cleaned.parquet")
@@ -60,6 +64,9 @@ def get_weighted_neighbors_pagerank(gakg_df, keyword, top_k=20):
     objects = gakg_df[gakg_df['object'] == keyword]['subject'].tolist()
     neighbors = set(subjects + objects)
     neighbors.add(keyword) # Include the keyword itself
+    
+    # Filter stopwords
+    neighbors = {n for n in neighbors if n not in STOPWORDS}
     
     if not neighbors:
         return {}
