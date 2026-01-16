@@ -1,7 +1,7 @@
 # 基于 GAKG 知识图谱的 Acemap 搜索增强
 
 本项目利用 GAKG（地学学术知识图谱）和 LLM 对 Acemap 的搜索功能进行增强。
-![demo](https://github.com/ar0nkk/imgs/blob/main/demo/streamlit.png)
+![demo](https://cdn.jsdelivr.net/gh/ar0nkk/imgs@main/demo/streamlit.png)
 - 数据集下载：[GAKG dataset](https://huggingface.co/datasets/aronkk/gakg)
 - Acemap 原地址：[Acemap](https://acemap.info)
 
@@ -80,5 +80,6 @@ pip install -r requirements.txt
 如果一个词在全图中连接了太多其他词（说明它是通用词），它的最终得分会被大幅削减。
 
 ---
+
 
 > 温馨提示：GAKG 知识图谱主要涵盖地学领域。搜索非地学关键词可能无法获得有效的增强效果（得分为 0）。
