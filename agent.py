@@ -1,5 +1,5 @@
 import json
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional
 
 from config import (
     OPENAI_API_KEY,
@@ -16,20 +16,9 @@ class AIIntentParser:
         self.api_key = OPENAI_API_KEY
         self.client = build_openai_client()
 
-    @staticmethod
-    def _normalize_sort(sort_label: Optional[str]) -> str:
-        if not sort_label:
-            return "relevance"
-        sort_label = sort_label.lower()
-        if "cite" in sort_label or "citation" in sort_label:
-            return "citation"
-        if "date" in sort_label or "recent" in sort_label or "new" in sort_label:
-            return "date"
-        return "relevance"
-
     def parse(self, query: str) -> Dict[str, str]:
         """Parse user query into structured info using an LLM."""
-        fallback = {"keyword": query.strip(), "sort": "relevance", "explanation": "fallback"}
+        fallback = {"keyword": query.strip(), "explanation": "fallback"}
         if not query:
             return fallback
 
@@ -38,12 +27,10 @@ class AIIntentParser:
 
         prompt = (
             "You are a search co-pilot for academic papers. "
-            "Rewrite the user query into a concise search keyword/phrase, and suggest a sorting signal. "
-            "Return JSON with keys: keyword, sort, explanation. "
-            "sort must be one of: relevance, citation, date. "
-            "Prefer 'citation' if the query implies influential/important/best/top. "
-            "Prefer 'date' if the query implies latest/recent/new. "
-            "Otherwise use 'relevance'."
+            "Rewrite the user query into a concise search keyword or phrase. "
+            "Return JSON with keys: keyword, explanation. "
+            "Do not choose or suggest a sorting mode; sorting is controlled by the user interface. "
+            "The explanation should briefly state how the keyword preserves the user's research intent."
         )
 
         try:
@@ -59,9 +46,8 @@ class AIIntentParser:
             content = completion.choices[0].message.content or ""
             parsed = json.loads(content)
             keyword = str(parsed.get("keyword", "")).strip() or query.strip()
-            sort = self._normalize_sort(parsed.get("sort"))
             explanation = parsed.get("explanation", "")
-            return {"keyword": keyword, "sort": sort, "explanation": explanation}
+            return {"keyword": keyword, "explanation": explanation}
         except Exception:
             return fallback
 

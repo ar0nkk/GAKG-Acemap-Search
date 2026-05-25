@@ -640,25 +640,14 @@ def run_enhanced_pipeline(
     return page_relevant, page_others, new_expansion_terms
 
 
-def _map_sort_label(sort_token: Optional[str]) -> str:
-    if sort_token == "citation":
-        return "Most Cited"
-    if sort_token == "date":
-        return "Latest Published"
-    return "Best Match"
-
-
 def _update_query_state(raw_query: str):
     use_ai = st.session_state.get("use_ai", True)
     if use_ai:
         parsed = get_ai_intent().parse(raw_query)
         st.session_state.search_keyword = parsed.get("keyword") or raw_query
-        sort_token = parsed.get("sort")
-        st.session_state.intent_sort_token = sort_token or "relevance"
         st.session_state.intent_explanation = parsed.get("explanation", "")
     else:
         st.session_state.search_keyword = raw_query
-        st.session_state.intent_sort_token = "relevance"
         st.session_state.intent_explanation = "AI disabled"
     st.session_state.query_raw = raw_query
     st.session_state.page = 1
@@ -672,7 +661,6 @@ def _on_query_change():
     st.session_state.query_raw = current
     st.session_state.rag_answer = None
     st.session_state.intent_explanation = ""
-    st.session_state.intent_sort_token = "relevance"
 
 
 # UI Layout
@@ -693,8 +681,6 @@ if "rag_answer" not in st.session_state:
     st.session_state.rag_answer = None
 if "intent_explanation" not in st.session_state:
     st.session_state.intent_explanation = ""
-if "intent_sort_token" not in st.session_state:
-    st.session_state.intent_sort_token = "relevance"
 if "author_filter" not in st.session_state:
     st.session_state.author_filter = ""
 if "affiliation_filter" not in st.session_state:
@@ -774,7 +760,6 @@ if search_button:
         st.session_state.rag_answer = None
         st.session_state.page = 1
         st.session_state.intent_explanation = ""
-        st.session_state.intent_sort_token = "relevance"
 
 query_raw = st.session_state.query_raw
 core_keyword = st.session_state.search_keyword or st.session_state.query_input
@@ -796,14 +781,13 @@ if core_keyword:
         )
 
     # AI Search Assistant: show LLM understanding + generate summary/suggestions
-    intent_sort_label = _map_sort_label(st.session_state.intent_sort_token)
     with st.container(border=True):
         st.markdown("#### 🧠 AI Search Assistant")
         st.markdown(f"- Core query: **{core_keyword or '(empty)'}**")
         exp = st.session_state.intent_explanation
         if exp:
             if exp == "fallback":
-                st.markdown("- Reasoning: LLM returned no explanation (maybe API missing or parsing failed); using raw query and default sorting.")
+                st.markdown("- Reasoning: LLM returned no explanation (maybe API missing or parsing failed); using raw query.")
             else:
                 st.markdown(f"- Reasoning: {exp}")
 

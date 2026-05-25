@@ -2,16 +2,17 @@ import os
 from typing import Optional
 from dotenv import load_dotenv
 from openai import OpenAI
-load_dotenv()
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(SCRIPT_DIR, ".env"))
 
 # API 配置，不配置也能使用普通搜索功能
 # 你需要在根目录创建一个 .env 文件，写上 OPENAI_API_KEY="你的密钥"，并检查下面的模型配置
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") #
 OPENAI_API_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-MODEL_NAME = "deepseek-v3.2-exp"
+MODEL_NAME = "qwen3.7-max"
 
 # 数据路径
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(SCRIPT_DIR, "data")
 
 # 清洗参数
